@@ -1,8 +1,9 @@
 [package]
 name = "sato"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "some sort of s-expr based html templating system"
+repository = "https://github.com/jakeprobst/sato"
 license = "WTFPL"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

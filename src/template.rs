@@ -36,28 +36,6 @@ impl TryFrom<String> for TemplateExprNode {
     }
 }
 
-
-pub enum TemplateNode {
-    Html{
-        attrs: Attributes,
-        children: Vec<TemplateNode>,
-    },
-    IsSet,
-    If,
-    Switch,
-    Case,
-    For,
-    Eq,
-    Mod,
-
-    Other {
-        tag: String,
-        attrs: Attributes,
-        children: Vec<TemplateNode>,
-    }
-}
-
-
 fn parse_attrs(attrs: &Vec<sexp::Sexp>) -> Result<Vec<Attribute>, ParseExprError> {
     attrs.iter().skip(1)
         .map(|attr| {
