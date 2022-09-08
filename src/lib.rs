@@ -273,6 +273,19 @@ mod tests {
     fn test_array_index_iteration() {
         let renderer = Renderer::builder()
             .build();
+        let expr = r#"(html (body (for (enumerate i k) in $asdf (div $k ": iter " $i))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("asdf", vec!["qaz", "wsx", "edc"])
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body><div>0: iter qaz</div><div>1: iter wsx</div><div>2: iter edc</div></body></html>"#)
+    }
+
+    #[test]
+    fn test_alternate_array_index_iteration() {
+        let renderer = Renderer::builder()
+            .build();
         let expr = r#"(html (body (for (@ (var i) (index k) (iterate $asdf)) (div $k ": iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()

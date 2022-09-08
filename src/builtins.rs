@@ -212,29 +212,59 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
         let iterable = expr.get(in_position+1)
             .map(|e| {
                 match e {
-                    TemplateExprNode::Identifier(ident) => context
-                        .get(ident)
-                        .cloned()
-                        .ok_or_else(|| RenderError::For("iterable is not a variable".into(), attrs.clone(), expr.iter().cloned().cloned().collect())),
-                    TemplateExprNode::Tag(tag) if tag.tag == "range" => parse_range(tag)
-                        .ok_or_else(|| RenderError::For("invalid range".into(), attrs.clone(), expr.iter().cloned().cloned().collect())),
+                    TemplateExprNode::Identifier(ident) => {
+                        context
+                            .get(ident)
+                            .cloned()
+                            .ok_or_else(|| RenderError::For("iterable is not a variable".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
+                    },
+                    TemplateExprNode::Tag(tag) if tag.tag == "range" => {
+                        parse_range(tag)
+                            .ok_or_else(|| RenderError::For("invalid range".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
+                    },
                     _ => Err(RenderError::For("iteration variable is not a valid type".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
                 }
             })
             .ok_or_else(|| RenderError::For("no iteration variable specified".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))??;
         let body = expr.get(in_position+2..)
             .unwrap_or_default();
+
         match iterable {
             ContextValue::Vec(v) => {
+                enum IterType {
+                    Normal(String),
+                    Enum(String, String),
+                }
+
                 let val = expr.get(in_position-1)
-                    .and_then(|a| renderer.evaluate(a, context).ok())
-                    .map(|e| e.join(""))
+                    .and_then(|e| {
+                        match e {
+                            TemplateExprNode::Identifier(_) => renderer.evaluate(e, context).map(|e| IterType::Normal(e.join(""))).ok(),
+                            TemplateExprNode::Tag(tag) if tag.tag == "enumerate" => {
+                                let iter = tag.children.get(0)
+                                    .and_then(TemplateExprNode::as_identifier)?;
+                                let index = tag.children.get(1)
+                                    .and_then(TemplateExprNode::as_identifier)?;
+                                Some(IterType::Enum(iter.clone(), index.clone()))
+                            },
+                            _ => None
+                        }
+                    })
                     .ok_or_else(|| RenderError::For("missing variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
 
                 let mut second_context = context.clone();
                 Ok(v.iter()
-                   .map(|value| {
-                       second_context.insert(val.clone(), value.clone());
+                   .enumerate()
+                   .map(|(i, value)| {
+                       match &val {
+                           IterType::Normal(val) => {
+                               second_context.insert(val.clone(), value.clone());
+                           }
+                           IterType::Enum(iter, index) => {
+                               second_context.insert(iter.clone(), value.clone());
+                               second_context.insert(index.clone(), i);
+                           }
+                       }
                        renderer.evaluate_multiple(body, &second_context)
                    })
                    .collect::<Result<Vec<_>, RenderError>>()?
