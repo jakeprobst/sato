@@ -27,7 +27,7 @@ pub(crate) fn do_is_set(_: &Attributes, expr: &[&TemplateExprNode], _render: &Re
         _ => Err(RenderError::IsSet("expected identifier".into(), expr.iter().cloned().cloned().collect()))
     }
 }
-    
+
 pub(crate) fn do_eq(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
     let exp1 = expr.get(0)
         .and_then(|e| renderer.evaluate(e, context).ok())
@@ -135,7 +135,6 @@ pub(crate) fn do_if(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Rende
             match expr.get(2) {
                 Some(e) => renderer.evaluate(e, context)?,
                 None => Vec::new(),
-                
             }
         }
         else {

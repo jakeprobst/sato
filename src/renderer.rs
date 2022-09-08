@@ -259,7 +259,6 @@ impl RendererBuilder {
         self
     }
 
-    
     pub fn build(self) -> Renderer {
         Renderer {
             functions: self.functions,
