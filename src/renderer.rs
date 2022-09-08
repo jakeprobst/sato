@@ -92,6 +92,27 @@ fn replace_all<E>(re: &regex::Regex, haystack: &str, replacement: impl Fn(&regex
     Ok(new)
 }
 
+fn context_to_string(cvalue: &ContextValue, renderer: &Renderer, context: &RenderContext) -> Result<String, RenderError> {
+    Ok(match cvalue {
+        ContextValue::String(s) => s.clone(),
+        ContextValue::Integer(i) => i.to_string(),
+        ContextValue::Template(t) => renderer.render(t, context)?,
+        ContextValue::Vec(v) => {
+            v.iter()
+                .map(|e| match e {
+                    ContextValue::String(s) => renderer.evaluate_string(s, context),
+                    ContextValue::Integer(i) => Ok(i.to_string()),
+                    ContextValue::Template(t) => renderer.render(t, context),
+                    ContextValue::Vec(_) => context_to_string(e, renderer, context),
+                    _ => Ok(String::new())
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .join("")
+        },
+        _ => String::new()
+    })
+}
+
 // TODO: stop being lazy and not use a regex
 pub(crate) fn expand_variable(expr: String, renderer: &Renderer, context: &RenderContext) -> Result<String, RenderError> {
     replace_all(&VAR_REGEX, &expr, |c: &regex::Captures| {
@@ -123,21 +144,14 @@ pub(crate) fn expand_variable(expr: String, renderer: &Renderer, context: &Rende
                     _ => return Ok(variable),
                 }
             }
-
-            match sub_context {
-                Some(ContextValue::String(s)) => s.clone(),
-                Some(ContextValue::Integer(i)) => i.to_string(),
-                Some(ContextValue::Template(t)) => renderer.render(t, context)?,
-                _ => variable
-            }
+            sub_context
+                .and_then(|c| context_to_string(c, renderer, context).ok())
+                .unwrap_or(variable)
         }
         else {
-            match &context.0.get(&variable[1..]) {
-                Some(ContextValue::String(s)) => s.clone(),
-                Some(ContextValue::Integer(i)) => i.to_string(),
-                Some(ContextValue::Template(t)) => renderer.render(t, context)?,
-                _ => variable,
-            }
+            context.0.get(&variable[1..])
+                .and_then(|c| context_to_string(c, renderer, context).ok())
+                .unwrap_or(variable)
         })
     })
 }

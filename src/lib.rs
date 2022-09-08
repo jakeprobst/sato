@@ -49,6 +49,20 @@ mod tests {
     }
 
     #[test]
+    fn test_vec_substitution() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (div $vec))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("asdf", "qwer")
+            .insert("vec", vec!["this", "that", "$asdf"])
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><div>thisthatqwer</div></html>"#)
+    }
+
+    #[test]
     fn test_if_is_set() {
         let renderer = Renderer::builder()
             .build();
