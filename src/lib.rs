@@ -260,6 +260,16 @@ mod tests {
     }
 
     #[test]
+    fn test_range_iteration() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (for i in (range 0 3) (div "iter " $i))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let html = renderer.render(&template, &RenderContext::default()).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body><div>iter 0</div><div>iter 1</div><div>iter 2</div></body></html>"#)
+    }
+
+    #[test]
     fn test_array_index_iteration() {
         let renderer = Renderer::builder()
             .build();
@@ -273,15 +283,12 @@ mod tests {
     }
 
     #[test]
-    fn test_range_iteration() {
+    fn test_alternate_range_iteration() {
         let renderer = Renderer::builder()
             .build();
         let expr = r#"(html (body (for (@ (var i) (min 0) (max 3)) (div "iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
-        let context = RenderContext::builder()
-            .insert("asdf", vec!["qaz", "wsx", "edc"])
-            .build();
-        let html = renderer.render(&template, &context).unwrap();
+        let html = renderer.render(&template, &RenderContext::default()).unwrap();
         assert_eq!(html, r#"<!doctype html5><html><body><div>iter 0</div><div>iter 1</div><div>iter 2</div></body></html>"#)
     }
 

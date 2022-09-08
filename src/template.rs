@@ -24,7 +24,7 @@ pub struct TemplateTag {
 #[derive(Debug, Clone)]
 pub enum TemplateExprNode {
     Identifier(String),
-    //Integer(i64),
+    Integer(i64),
     Tag(TemplateTag)
 }
 
@@ -33,6 +33,22 @@ impl TryFrom<String> for TemplateExprNode {
     
     fn try_from(other: String) -> Result<TemplateExprNode, Self::Error> {
         Ok(parse_expr(&sexp::parse(&other)?)?)
+    }
+}
+
+impl TemplateExprNode {
+    pub fn as_identifier(&self) -> Option<&String> {
+        match self {
+            TemplateExprNode::Identifier(s) => Some(s),
+            _ => None
+        }
+    }
+
+    pub fn as_integer(&self) -> Option<i64> {
+        match self {
+            TemplateExprNode::Integer(i) => Some(*i),
+            _ => None
+        }
     }
 }
 
@@ -62,7 +78,7 @@ fn parse_expr(expr: &sexp::Sexp) -> Result<TemplateExprNode, ParseExprError> {
         sexp::Sexp::Atom(atom) => {
             match atom {
                 sexp::Atom::S(s) => TemplateExprNode::Identifier(s.to_string()),
-                sexp::Atom::I(i) => TemplateExprNode::Identifier(i.to_string()),
+                sexp::Atom::I(i) => TemplateExprNode::Integer(*i),
                 //sexp::Atom::I(i) => TemplateExprNode::Integer(i),
                 _ => panic!("expr is not an atom {:?}", atom),
             }

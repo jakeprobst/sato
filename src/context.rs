@@ -66,6 +66,18 @@ impl From<usize> for ContextValue {
     }
 }
 
+impl From<i32> for ContextValue {
+    fn from(other: i32) -> Self {
+        ContextValue::Integer(other as i64)
+    }
+}
+
+impl From<i64> for ContextValue {
+    fn from(other: i64) -> Self {
+        ContextValue::Integer(other)
+    }
+}
+
 
 #[derive(Default, Clone, Debug)]
 pub struct RenderContext(pub(crate) BTreeMap<String, ContextValue>);

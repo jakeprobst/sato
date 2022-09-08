@@ -1,6 +1,6 @@
 use crate::renderer::{Attributes, Renderer, RenderError, basic_html_tag};
 use crate::context::{ContextValue, RenderContext};
-use crate::template::TemplateExprNode;
+use crate::template::{TemplateExprNode, TemplateTag};
 
 
 pub(crate) fn do_html(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
@@ -182,6 +182,23 @@ pub(crate) fn do_switch(_: &Attributes, expr: &[&TemplateExprNode], renderer: &R
        .collect::<Vec<_>>())
 }
 
+fn parse_range(tag: &TemplateTag) -> Option<ContextValue> {
+    let min = tag.children.get(0)
+        .and_then(TemplateExprNode::as_integer)?;
+    let max = tag.children.get(1)
+        .and_then(TemplateExprNode::as_integer)?;
+    let step = tag.children.get(2)
+        .and_then(TemplateExprNode::as_integer)
+        .unwrap_or(1) as usize;
+
+    let range = (min..max)
+        .step_by(step)
+        .map(Into::into)
+        .collect();
+
+    Some(ContextValue::Vec(range))
+}
+
 pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
     let in_position = expr.iter()
         .position(|b| {
@@ -193,13 +210,18 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
 
     if let Some(in_position) = in_position {
         let iterable = expr.get(in_position+1)
-            .and_then(|e| {
+            .map(|e| {
                 match e {
-                    TemplateExprNode::Identifier(ident) => context.get(ident),
-                    _ => None
+                    TemplateExprNode::Identifier(ident) => context
+                        .get(ident)
+                        .cloned()
+                        .ok_or_else(|| RenderError::For("iterable is not a variable".into(), attrs.clone(), expr.iter().cloned().cloned().collect())),
+                    TemplateExprNode::Tag(tag) if tag.tag == "range" => parse_range(tag)
+                        .ok_or_else(|| RenderError::For("invalid range".into(), attrs.clone(), expr.iter().cloned().cloned().collect())),
+                    _ => Err(RenderError::For("iteration variable is not a valid type".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
                 }
             })
-            .ok_or_else(|| RenderError::For("no iterable specified".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+            .ok_or_else(|| RenderError::For("no iteration variable specified".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))??;
         let body = expr.get(in_position+2..)
             .unwrap_or_default();
         match iterable {

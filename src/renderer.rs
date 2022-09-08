@@ -215,6 +215,9 @@ impl Renderer {
             TemplateExprNode::Identifier(ident) => {
                 vec![expand_variable(ident.clone(), self, context)?]
             },
+            TemplateExprNode::Integer(i) => {
+                vec![i.to_string()]
+            },
             TemplateExprNode::Tag(tag) => {
                 match self.functions.get(&tag.tag) {
                     Some(op_func) => op_func(&tag.attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
