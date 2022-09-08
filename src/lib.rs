@@ -78,6 +78,19 @@ mod tests {
     fn test_array_iteration() {
         let renderer = Renderer::builder()
             .build();
+        let expr = r#"(html (body (for i in $asdf (div "iter " $i))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("asdf", vec!["qaz", "wsx", "edc"])
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body><div>iter qaz</div><div>iter wsx</div><div>iter edc</div></body></html>"#)
+    }
+
+    #[test]
+    fn test_alternate_array_iteration() {
+        let renderer = Renderer::builder()
+            .build();
         let expr = r#"(html (body (for (@ (var i) (iterate $asdf)) (div "iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()
@@ -117,7 +130,7 @@ mod tests {
     fn test_object_iteration() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (body (for (@ (key k) (value v) (iterate $asdf)) (div "key " $k ", value " $v))))"#;
+        let expr = r#"(html (body (for k v in $asdf (div "key " $k ", value " $v))))"#;
         let template = Template::from_str(expr).unwrap();
         let internal_obj = RenderContext::builder()
             .insert("as", "df")
@@ -130,6 +143,22 @@ mod tests {
         assert_eq!(html, r#"<!doctype html5><html><body><div>key as, value df</div><div>key qw, value er</div></body></html>"#)
     }
 
+    #[test]
+    fn test_alternate_object_iteration() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (for (@ (key k) (value v) (iterate $asdf)) (div "key " $k ", value " $v))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let internal_obj = RenderContext::builder()
+            .insert("as", "df")
+            .insert("qw", "er")
+            .build();
+        let context = RenderContext::builder()
+            .insert("asdf", internal_obj)
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body><div>key as, value df</div><div>key qw, value er</div></body></html>"#)
+    }
 
     #[test]
     fn test_object_access() {

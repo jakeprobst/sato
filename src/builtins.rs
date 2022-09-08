@@ -184,55 +184,36 @@ pub(crate) fn do_switch(_: &Attributes, expr: &[&TemplateExprNode], renderer: &R
 }
 
 pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let body = expr.get(0..)
-        .unwrap_or_default();
-    let max = attrs.get("max")
-        .and_then(|a| renderer.evaluate_string(a, context).ok())
-        .and_then(|a| a.parse::<i32>().ok());
-    let min = attrs.get("min")
-        .and_then(|a| renderer.evaluate_string(a, context).ok())
-        .and_then(|a| a.parse::<i32>().ok());
-    let step = attrs.get("step")
-        .and_then(|a| renderer.evaluate_string(a, context).ok())
-        .and_then(|a| a.parse::<i32>().ok());
-    
-    if let (Some(min), Some(max)) = (min, max) {
-        let val = attrs.get("var")
-            .ok_or_else(|| RenderError::For("missing var attribute for range iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+    let in_position = expr.iter()
+        .position(|b| {
+            match b {
+                TemplateExprNode::Identifier(ident) if ident == "in" => true,
+                _ => false,
+            }
+        });
 
-        let mut second_context = context.clone();
-        Ok((min..max)
-           .step_by(step.unwrap_or(1) as usize)
-           .map(|value| {
-               second_context.insert(val, value.to_string());
-               renderer.evaluate_multiple(body, &second_context)
-           })
-           .collect::<Result<Vec<_>, RenderError>>()?
-           .iter()
-           .flatten()
-           .cloned()
-           .collect())
-    }
-    else {
-        let iterable = context
-            .get(attrs.get("iterate")
-                 .ok_or_else(|| RenderError::For("missing iterate attribute".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?)
-            .ok_or_else(|| RenderError::For("iterate attribute variable is not set ".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
-
+    if let Some(in_position) = in_position {
+        let iterable = expr.get(in_position+1)
+            .and_then(|e| {
+                match e {
+                    TemplateExprNode::Identifier(ident) => context.get(ident),
+                    _ => None
+                }
+            })
+            .ok_or_else(|| RenderError::For("no iterable specified".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+        let body = expr.get(in_position+2..)
+            .unwrap_or_default();
         match iterable {
             ContextValue::Vec(v) => {
-                let val = attrs.get("var")
-                    .ok_or_else(|| RenderError::For("missing var attribute for array iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
-                let index = attrs.get("index");
+                let val = expr.get(in_position-1)
+                    .and_then(|a| renderer.evaluate(a, context).ok())
+                    .map(|e| e.join(""))
+                    .ok_or_else(|| RenderError::For("missing variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
 
                 let mut second_context = context.clone();
                 Ok(v.iter()
-                   .enumerate()
-                   .map(|(i, value)| {
-                       second_context.insert(val, value.clone());
-                       if let Some(index) = index {
-                           second_context.insert(index, i);
-                       }
+                   .map(|value| {
+                       second_context.insert(val.clone(), value.clone());
                        renderer.evaluate_multiple(body, &second_context)
                    })
                    .collect::<Result<Vec<_>, RenderError>>()?
@@ -240,17 +221,21 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                    .flatten()
                    .cloned()
                    .collect())
-            }
+            },
             ContextValue::Object(o) => {
-                let key_var = attrs.get("key")
-                    .ok_or_else(|| RenderError::For("missing key attribute for object iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
-                let value_var = attrs.get("value")
-                    .ok_or_else(|| RenderError::For("missing value attribute for object iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+                let key_var = expr.get(in_position-2)
+                    .and_then(|a| renderer.evaluate(a, context).ok())
+                    .map(|e| e.join(""))
+                    .ok_or_else(|| RenderError::For("missing key variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+                let value_var = expr.get(in_position-1)
+                    .and_then(|a| renderer.evaluate(a, context).ok())
+                    .map(|e| e.join(""))
+                    .ok_or_else(|| RenderError::For("missing value variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
                 let mut second_context = context.clone();
                 Ok(o.0.iter()
                    .map(|(key, value)| {
-                       second_context.insert(key_var, ContextValue::String(key.clone()));
-                       second_context.insert(value_var, value.clone());
+                       second_context.insert(key_var.clone(), ContextValue::String(key.clone()));
+                       second_context.insert(value_var.clone(), value.clone());
                        renderer.evaluate_multiple(body, &second_context)
                    })
                    .collect::<Result<Vec<_>, RenderError>>()?
@@ -258,8 +243,89 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                    .flatten()
                    .cloned()
                    .collect())
+            },
+            _ => Err(RenderError::For("element is not iterable".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
+        }
+    }
+    else {
+        let body = expr.get(0..)
+            .unwrap_or_default();
+
+        let max = attrs.get("max")
+            .and_then(|a| renderer.evaluate_string(a, context).ok())
+            .and_then(|a| a.parse::<i32>().ok());
+        let min = attrs.get("min")
+            .and_then(|a| renderer.evaluate_string(a, context).ok())
+            .and_then(|a| a.parse::<i32>().ok());
+        let step = attrs.get("step")
+            .and_then(|a| renderer.evaluate_string(a, context).ok())
+            .and_then(|a| a.parse::<i32>().ok());
+
+        if let (Some(min), Some(max)) = (min, max) {
+            let val = attrs.get("var")
+                .ok_or_else(|| RenderError::For("missing var attribute for range iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+
+            let mut second_context = context.clone();
+            Ok((min..max)
+               .step_by(step.unwrap_or(1) as usize)
+               .map(|value| {
+                   second_context.insert(val, value.to_string());
+                   renderer.evaluate_multiple(body, &second_context)
+               })
+               .collect::<Result<Vec<_>, RenderError>>()?
+               .iter()
+               .flatten()
+               .cloned()
+               .collect())
+        }
+        else {
+            let iterable = context
+                .get(attrs.get("iterate")
+                     .ok_or_else(|| RenderError::For("missing iterate attribute".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?)
+                .ok_or_else(|| RenderError::For("iterate attribute variable is not set ".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+
+            match iterable {
+                ContextValue::Vec(v) => {
+                    let val = attrs.get("var")
+                        .ok_or_else(|| RenderError::For("missing var attribute for array iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+                    let index = attrs.get("index");
+
+                    let mut second_context = context.clone();
+                    Ok(v.iter()
+                       .enumerate()
+                       .map(|(i, value)| {
+                           second_context.insert(val, value.clone());
+                           if let Some(index) = index {
+                               second_context.insert(index, i);
+                           }
+                           renderer.evaluate_multiple(body, &second_context)
+                       })
+                       .collect::<Result<Vec<_>, RenderError>>()?
+                       .iter()
+                       .flatten()
+                       .cloned()
+                       .collect())
+                }
+                ContextValue::Object(o) => {
+                    let key_var = attrs.get("key")
+                        .ok_or_else(|| RenderError::For("missing key attribute for object iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+                    let value_var = attrs.get("value")
+                        .ok_or_else(|| RenderError::For("missing value attribute for object iteration".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
+                    let mut second_context = context.clone();
+                    Ok(o.0.iter()
+                       .map(|(key, value)| {
+                           second_context.insert(key_var, ContextValue::String(key.clone()));
+                           second_context.insert(value_var, value.clone());
+                           renderer.evaluate_multiple(body, &second_context)
+                       })
+                       .collect::<Result<Vec<_>, RenderError>>()?
+                       .iter()
+                       .flatten()
+                       .cloned()
+                       .collect())
+                }
+                _ => Err(RenderError::For("iterate attribute is not an array or object".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
             }
-            _ => Err(RenderError::For("iterate attribute is not an array or object".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
         }
     }
 }
