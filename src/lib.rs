@@ -133,7 +133,7 @@ assert_eq!(html, "<!doctype html5><html><body><div><h2>faketitle</h2><span>poste
 # builtin functions
 ## if
 `(if [condition] [true code block] [false code block])`
-if condition evaluates to `'true` then execute the true block, if `'false` then execute false block.
+if condition evaluates to true then execute the true block, if false then execute false block.
 
 ## get
 `(get [number] [array])`
@@ -145,7 +145,7 @@ gets an element from an array or map
 ## is-set
 `(is-set [variable])`
 
-takes a single argument and returns `'true` or `'false` depending if the variable is set.
+takes a single argument and returns true or false depending if the variable is set.
 
 ## switch/case
 `(switch [variable] (case [value] [code block]) (case [value] [code block]) ...)`
@@ -162,7 +162,7 @@ executes code block for each element in the iterable.
 ## eq/gt/lt/gte/lte/ne
 `(eq [item] [item])`
 
-standard comparison operators, returns `'true` or `'false`.
+standard comparison operators, returns true or false
 
 ## +, -, *, /, %
 standard math operators
