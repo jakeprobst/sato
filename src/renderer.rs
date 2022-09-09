@@ -5,11 +5,90 @@ use crate::context::{ContextValue, RenderContext};
 use crate::template::{Template, TemplateExprNode};
 use crate::builtins;
 
-type NodeHandler = dyn Fn(&Attributes, &[&TemplateExprNode], &Renderer, &RenderContext) -> Result<Vec<String>, RenderError>;
+type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError>;
+//type NodeHandler = dyn Fn(&Attributes, &[&TemplateExprNode], &Renderer, &RenderContext) -> Result<Vec<String>, RenderError>;
 
-static VAR_REGEX: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-    regex::Regex::new(r#"\$[a-zA-Z0-9_\-\.]+"#).unwrap()
-});
+#[derive(Debug)]
+pub enum RenderValue {
+    String(String),
+    Integer(i64),
+    Boolean(bool),
+    Vec(Vec<RenderValue>),
+    Empty,
+}
+
+impl RenderValue {
+    pub fn finalize(self) -> String {
+        match self {
+            RenderValue::String(s) => s,
+            RenderValue::Integer(i) => i.to_string(),
+            RenderValue::Boolean(b) => b.to_string(),
+            RenderValue::Vec(v) => v.into_iter().map(|e| e.finalize()).collect::<Vec<_>>().join(""),
+            RenderValue::Empty => "".into(),
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            RenderValue::Integer(i) => Some(*i),
+            _ => None
+        }
+    }
+}
+
+impl From<&str> for RenderValue {
+    fn from(other: &str) -> Self {
+        RenderValue::String(other.into())
+    }
+}
+
+impl From<String> for RenderValue {
+    fn from(other: String) -> Self {
+        RenderValue::String(other)
+    }
+}
+
+impl<T: Into<RenderValue>> From<Vec<T>> for RenderValue {
+    fn from(other: Vec<T>) -> Self {
+        RenderValue::Vec(other.into_iter().map(|k| k.into()).collect())
+    }
+}
+
+impl From<i64> for RenderValue {
+    fn from(other: i64) -> Self {
+        RenderValue::Integer(other)
+    }
+}
+
+impl From<bool> for RenderValue {
+    fn from(other: bool) -> Self {
+        RenderValue::Boolean(other)
+    }
+}
+
+impl PartialEq for RenderValue {
+    fn eq(&self, other: &RenderValue) -> bool {
+        match (self, other) {
+            (RenderValue::Integer(a), RenderValue::Integer(b)) => a == b,
+            (RenderValue::Boolean(a), RenderValue::Boolean(b)) => a == b,
+            (RenderValue::String(a), RenderValue::String(b)) => a == b,
+            (RenderValue::Vec(a), RenderValue::Vec(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl PartialOrd for RenderValue {
+    fn partial_cmp(&self, other: &RenderValue) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (RenderValue::Integer(a), RenderValue::Integer(b)) => a.partial_cmp(b),
+            (RenderValue::Boolean(a), RenderValue::Boolean(b)) => a.partial_cmp(b),
+            (RenderValue::String(a), RenderValue::String(b)) => a.partial_cmp(b),
+            (RenderValue::Vec(a), RenderValue::Vec(b)) => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+}
 
 
 #[derive(Debug, Clone)]
@@ -56,7 +135,7 @@ pub enum RenderError {
     #[error("error in `is-set`: {0} ({1:?})")]
     IsSet(String, Vec<TemplateExprNode>),
     #[error("error in `eq`: {0} ({1:?})")]
-    Eq(String, Vec<TemplateExprNode>),
+    Cmp(String, Vec<TemplateExprNode>),
     #[error("error in `if`: {0} ({1:?})")]
     If(String, Vec<TemplateExprNode>),
     #[error("error in `case`: {0} ({1:?})")]
@@ -66,8 +145,8 @@ pub enum RenderError {
     #[error("error in `for`: {0} {1:?} ({2:?})")]
     For(String, Attributes, Vec<TemplateExprNode>),
 
-    #[error("error in `if`: {0} ({1:?})")]
-    Mod(String, Vec<TemplateExprNode>),
+    #[error("error in math operator: {0} ({1:?})")]
+    Math(String, Vec<TemplateExprNode>),
 
     #[error("error in `{0}`: {1} ({1:?})")]
     UserDefined(String, String, Vec<TemplateExprNode>),
@@ -75,21 +154,6 @@ pub enum RenderError {
 
 pub struct Renderer {
     functions: HashMap<String, Box<NodeHandler>>,
-}
-
-// stolen from https://github.com/rust-lang/regex/issues/648#issuecomment-590072186
-// to get around the default replace_all not handlong errors
-fn replace_all<E>(re: &regex::Regex, haystack: &str, replacement: impl Fn(&regex::Captures) -> Result<String, E>) -> Result<String, E> {
-    let mut new = String::with_capacity(haystack.len());
-    let mut last_match = 0;
-    for caps in re.captures_iter(haystack) {
-        let m = caps.get(0).unwrap();
-        new.push_str(&haystack[last_match..m.start()]);
-        new.push_str(&replacement(&caps)?);
-        last_match = m.end();
-    }
-    new.push_str(&haystack[last_match..]);
-    Ok(new)
 }
 
 fn context_to_string(cvalue: &ContextValue, renderer: &Renderer, context: &RenderContext) -> Result<String, RenderError> {
@@ -113,51 +177,56 @@ fn context_to_string(cvalue: &ContextValue, renderer: &Renderer, context: &Rende
     })
 }
 
-// TODO: stop being lazy and not use a regex
-pub(crate) fn expand_variable(expr: String, renderer: &Renderer, context: &RenderContext) -> Result<String, RenderError> {
-    replace_all(&VAR_REGEX, &expr, |c: &regex::Captures| {
-        let variable = c
-            .get(0)
-            .ok_or_else(|| RenderError::ExpandVariable("could not get variable".into(), expr.clone()))?
-            .as_str()
-            .to_string();
-        Ok(if variable.contains(".") {
-            let elements = variable
-                .get(1..)
-                .ok_or_else(|| RenderError::ExpandVariable("invalid variable name".into(), expr.clone()))?
-                .split('.')
-                .collect::<Vec<_>>();
-            let obj = elements
-                .get(0)
-                .ok_or_else(|| RenderError::ExpandVariable("could not find object name".into(), expr.clone()))?;
-            let vars = elements
-                .get(1..)
-                .ok_or_else(|| RenderError::ExpandVariable("could not get object variable".into(), expr.clone()))?;
+pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
+    Ok(
+        if expr.starts_with('$') {
+            if expr.contains(".") {
+                expr[1..].split('.').try_fold((context.clone(), None), |(mut context, output), expr| {
+                    if output.is_some() {
+                        return Ok((context, output))
+                    }
 
-            // TODO: fold?
-            let mut sub_context = context.0.get(*obj);
-            for var in vars.iter() {
-                match sub_context {
-                    Some(ContextValue::Object(o)) => {
-                        sub_context = o.0.get::<str>(var)
-                    },
-                    _ => return Ok(variable),
-                }
+                    match context.get(expr) {
+                        Some(ContextValue::Object(o)) => {
+                            context = o.clone();
+                            Ok((context, output))
+                        },
+                        Some(item) => {
+                            let eval = match item {
+                                ContextValue::Integer(i) => Some(RenderValue::Integer(*i)),
+                                ContextValue::Boolean(b) => Some(RenderValue::Boolean(*b)),
+                                ContextValue::String(s) => Some(RenderValue::String(s.clone())),
+                                ContextValue::Vec(_) => Some(RenderValue::String(context_to_string(item, renderer, &context)?)),
+                                _ => Some(RenderValue::Empty)
+                            };
+                            Ok((context, eval))
+                        },
+                        None => Ok((context, output))
+                    }
+                })?
+                    .1
+                    .unwrap_or_else(|| expr.clone().into())
             }
-            sub_context
-                .and_then(|c| context_to_string(c, renderer, context).ok())
-                .unwrap_or(variable)
+            else {
+                context.0.get(&expr[1..])
+                    .map(|e| match e {
+                        ContextValue::Integer(i) => Ok(RenderValue::Integer(*i)),
+                        ContextValue::Boolean(b) => Ok(RenderValue::Boolean(*b)),
+                        ContextValue::String(s) => Ok(RenderValue::String(s.clone())),
+                        ContextValue::Vec(_) => Ok(RenderValue::String(context_to_string(e, renderer, context)?)),
+                        _ => Err(RenderError::ExpandVariable("invalid variable type".into(), expr.clone()))
+                    })
+                    .unwrap_or(Ok(RenderValue::String(expr.clone())))?
+            }
         }
         else {
-            context.0.get(&variable[1..])
-                .and_then(|c| context_to_string(c, renderer, context).ok())
-                .unwrap_or(variable)
-        })
-    })
+            RenderValue::String(expr.clone())
+        }
+    )
 }
 
-pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let mut l = Vec::new();
+pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
+    let mut l = Vec::<RenderValue>::new();
     let attr_str = attrs.0.iter()
         .map(|attr| {
             let key = renderer.evaluate_string(&attr.0, context)?;
@@ -167,31 +236,39 @@ pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[&TemplateE
         .collect::<Result<Vec<_>, RenderError>>()?
         .join("");
     if expr.len() == 0 {
-        l.push(format!("<{}{} />", tag, attr_str));
+        l.push(format!("<{}{} />", tag, attr_str).into());
     }
     else {
-        l.push(format!("<{}{}>", tag, attr_str));
-        l.append(&mut renderer.evaluate_multiple(expr, context)?);
-        l.push(format!("</{}>", tag));
+        l.push(format!("<{}{}>", tag, attr_str).into());
+        l.push(renderer.evaluate_multiple(expr, context)?.into());
+        l.push(format!("</{}>", tag).into());
     }
-    Ok(l)
+    Ok(l.into())
 }
 
 
 fn standard_issue_functions() -> HashMap<String, Box<NodeHandler>> {
     let mut functions = HashMap::new();
     functions.insert("html".into(), Box::new(builtins::do_html) as Box<NodeHandler>);
-    functions.insert("is-set".into(), Box::new(builtins::do_is_set) as Box<NodeHandler>);
-    functions.insert("if".into(), Box::new(builtins::do_if) as Box<NodeHandler>);
-    functions.insert("switch".into(), Box::new(builtins::do_switch) as Box<NodeHandler>);
-    functions.insert("case".into(), Box::new(builtins::do_case) as Box<NodeHandler>);
-    functions.insert("for".into(), Box::new(builtins::do_for) as Box<NodeHandler>);
-    functions.insert("eq".into(), Box::new(builtins::do_eq) as Box<NodeHandler>);
-    functions.insert("+".into(), Box::new(builtins::do_add) as Box<NodeHandler>);
-    functions.insert("-".into(), Box::new(builtins::do_sub) as Box<NodeHandler>);
-    functions.insert("*".into(), Box::new(builtins::do_mul) as Box<NodeHandler>);
-    functions.insert("/".into(), Box::new(builtins::do_div) as Box<NodeHandler>);
-    functions.insert("%".into(), Box::new(builtins::do_mod) as Box<NodeHandler>);
+    functions.insert("is-set".into(), Box::new(builtins::do_is_set));
+    functions.insert("if".into(), Box::new(builtins::do_if));
+    functions.insert("switch".into(), Box::new(builtins::do_switch));
+    functions.insert("case".into(), Box::new(builtins::do_case));
+    functions.insert("for".into(), Box::new(builtins::do_for));
+
+    functions.insert("eq".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q == w)));
+    functions.insert("lt".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q < w)));
+    functions.insert("gt".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q > w)));
+    functions.insert("lte".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q <= w)));
+    functions.insert("gte".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q >= w)));
+    functions.insert("ne".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q != w)));
+
+    functions.insert("+".into(), Box::new(|a,e,r,c| builtins::do_math_op(a,e,r,c, |q, w| q + w)));
+    functions.insert("-".into(), Box::new(|a,e,r,c| builtins::do_math_op(a,e,r,c, |q, w| q - w)));
+    functions.insert("*".into(), Box::new(|a,e,r,c| builtins::do_math_op(a,e,r,c, |q, w| q * w)));
+    functions.insert("/".into(), Box::new(|a,e,r,c| builtins::do_math_op(a,e,r,c, |q, w| q / w)));
+    functions.insert("%".into(), Box::new(|a,e,r,c| builtins::do_math_op(a,e,r,c, |q, w| q % w)));
+
     functions
 }
 
@@ -200,23 +277,21 @@ impl Renderer {
         RendererBuilder::new()
     }
 
-    pub fn evaluate_multiple(&self, expr: &[&TemplateExprNode], context: &RenderContext) -> Result<Vec<String>, RenderError> {
+    pub fn evaluate_multiple(&self, expr: &[&TemplateExprNode], context: &RenderContext) -> Result<RenderValue, RenderError> {
         Ok(expr
-            .iter()
-            .map(|e| self.evaluate(e, context))
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect())
+           .iter()
+           .map(|e| self.evaluate(e, context))
+           .collect::<Result<Vec<_>, _>>()?
+           .into())
     }
 
-    pub fn evaluate(&self, expr: &TemplateExprNode, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+    pub fn evaluate(&self, expr: &TemplateExprNode, context: &RenderContext) -> Result<RenderValue, RenderError> {
         Ok(match expr {
             TemplateExprNode::Identifier(ident) => {
-                vec![expand_variable(ident.clone(), self, context)?]
+                expand_variable(ident, self, context)?
             },
             TemplateExprNode::Integer(i) => {
-                vec![i.to_string()]
+                (*i).into()
             },
             TemplateExprNode::Tag(tag) => {
                 match self.functions.get(&tag.tag) {
@@ -230,15 +305,15 @@ impl Renderer {
     pub fn evaluate_string(&self, expr: &String, context: &RenderContext) -> Result<String, RenderError> {
         Ok(
             if let Ok(expr) = TemplateExprNode::try_from(expr.clone()) {
-                self.evaluate(&expr, context)?.join("")
+                self.evaluate(&expr, context)?.finalize()
             }
             else {
-                expand_variable(expr.clone(), self, context)?
+                expand_variable(expr, self, context)?.finalize()
             })
     }
 
     pub fn render(&self, template: &Template, context: &RenderContext) -> Result<String, RenderError> {
-        Ok(Vec::from(self.evaluate(&template.expr, context)?).join(""))
+        Ok(self.evaluate(&template.expr, context)?.finalize())
     }
 }
 

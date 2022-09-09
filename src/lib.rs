@@ -103,7 +103,7 @@ use sato::renderer::{Attributes, Renderer, RenderError};
 use sato::context::RenderContext;
 use sato::template::{Template, TemplateExprNode};
 
-let post_expr = r##"(div (h2 $title) (span "posted by $author") $content (br) (div (for tag in $tags (span "#$tag"))))"##;
+let post_expr = r##"(div (h2 $title) (span "posted by " $author) $content (br) (div (for tag in $tags (span "#" $tag))))"##;
 let blogpost_template = Template::from_str(post_expr).unwrap();
 
 let renderer = Renderer::builder()
@@ -116,7 +116,7 @@ let renderer = Renderer::builder()
         new_context.insert("author", author);
         new_context.insert("content", renderer.evaluate_multiple(expr, &new_context)?);
 
-        Ok(vec![renderer.render(&blogpost_template, &new_context).unwrap()])
+        Ok(renderer.render(&blogpost_template, &new_context).unwrap().into())
     }))
     .build();
 let expr = r#"(html (body (blogpost (@ (title faketitle) (author me)) (div "my content here"))))"#;
@@ -130,24 +130,44 @@ assert_eq!(html, "<!doctype html5><html><body><div><h2>faketitle</h2><span>poste
 ```
 
 
+# builtin functions
+## if
+`(if [condition] [true code block] [false code block])`
+if condition evaluates to `'true` then execute the true block, if `'false` then execute false block.
+
+## is-set
+`(is-set [variable])`
+
+takes a single argument and returns `'true` or `'false` depending if the variable is set.
+
+## switch/case
+`(switch [variable] (case [value] [code block]) (case [value] [code block]) ...)`
+
+## for
+`(for [item] in [array] [code block])`
+
+`(for [key] [value] in [map] [code block])`
+
+`(for [item] in (range [min] [max] [step?]) [code block])`
+
+executes code block for each element in the iterable.
+
+## eq/gt/lt/gte/lte/ne
+`(eq [item] [item])`
+
+standard comparison operators, returns `'true` or `'false`.
+
+## +, -, *, /, %
+standard math operators
+
+`(+ [item] [item])`
+
+
 
 */
 
 
-
-
-
-
-
-
-
-
-
-#![feature(once_cell)]
-
-
-#[doc(hidden)]
-pub mod builtins;
+mod builtins;
 pub mod context;
 pub mod renderer;
 pub mod template;
@@ -156,11 +176,22 @@ pub mod template;
 #[cfg(test)]
 mod tests {
     use crate::context::{RenderContext, ContextValue};
-    use crate::renderer::Renderer;
+    use crate::renderer::{Renderer, RenderValue};
     use crate::template::{Template, TemplateExprNode};
 
     #[test]
-    fn basic_render() {
+    fn test_no_builtins() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(head (title "test title"))"#;
+        let template = Template::from_str(expr).unwrap();
+        let html = renderer.render(&template, &RenderContext::default()).unwrap();
+
+        assert_eq!(html, "<head><title>test title</title></head>")
+    }
+
+    #[test]
+    fn test_basic_render() {
         let renderer = Renderer::builder()
             .build();
         let expr = r#"(html (head (title "test title")))"#;
@@ -400,7 +431,6 @@ mod tests {
     fn test_object_variable_in_attributes() {
         let renderer = Renderer::builder()
             .build();
-        //let expr = r#"(html (for qw in $as (div (@ (class $qw.er)) $qw.zx)))"#;
         let expr = r#"(html (for (@ (var qw) (iterate $as)) (div (@ (class $qw.er)) $qw.zx)))"#;
         let template = Template::from_str(expr).unwrap();
 
@@ -437,7 +467,7 @@ mod tests {
     fn test_custom_closure() {
         let renderer = Renderer::builder()
             .function("blah", Box::new(|_, _, _, _| {
-                Ok(vec!["hello there".into()])
+                Ok("hello there".into())
             }))
             .build();
         let expr = r#"(html (div (blah something or other)))"#;
@@ -448,8 +478,8 @@ mod tests {
 
     #[test]
     fn test_custom_function() {
-        fn blah(_: &crate::renderer::Attributes, _: &[&TemplateExprNode], _: &Renderer, _: &RenderContext) -> Result<Vec<String>, crate::renderer::RenderError> {
-            Ok(vec!["hello there".into()])
+        fn blah(_: &crate::renderer::Attributes, _: &[&TemplateExprNode], _: &Renderer, _: &RenderContext) -> Result<RenderValue, crate::renderer::RenderError> {
+            Ok("hello there".into())
         }
 
         let renderer = Renderer::builder()
@@ -475,7 +505,7 @@ mod tests {
                     output.push("] ".into());
                 }
 
-                Ok(output)
+                Ok(output.into())
             }))
             .build();
         let expr = r#"(html (div (blah (@ (this is) (the attr)) something or other)))"#;
@@ -488,12 +518,11 @@ mod tests {
     fn test_more_html_in_closure() {
         let renderer = Renderer::builder()
             .function("blah", Box::new(|_, expr, renderer, context| {
-                let mut output: Vec<String> = Vec::new();
+                let mut output: Vec<RenderValue> = Vec::new();
                 output.push("<blah>".into());
-                //output.extend(&mut expr.into_iter().cloned().flatten());
-                output.append(&mut renderer.evaluate_multiple(expr, context)?);
+                output.push(renderer.evaluate_multiple(expr, context)?.into());
                 output.push("</blah>".into());
-                Ok(output)
+                Ok(output.into())
             }))
             .build();
         let expr = r#"(html (div (blah (span hello))))"#;
@@ -514,7 +543,7 @@ mod tests {
                 let suboutput = renderer.render(&subtemplate, &RenderContext::default())?;
                 output.push(suboutput);
                 output.push("</blah>".into());
-                Ok(output)
+                Ok(output.into())
             }))
             .build();
         let expr = r#"(html (div (blah (span hello))))"#;
@@ -536,7 +565,7 @@ mod tests {
                 output.push("<blah>".into());
                 output.push(s);
                 output.push("</blah>".into());
-                Ok(output)
+                Ok(output.into())
             }))
             .build();
         let expr = r#"(html (div (blah (span hello))))"#;
@@ -555,21 +584,21 @@ mod tests {
 
         let renderer = Renderer::builder()
             .function("blah", Box::new(move |attr, expr, renderer, context| {
-                let mut output: Vec<String> = Vec::new();
+                let mut output: Vec<RenderValue> = Vec::new();
                 output.push("<blah>".into());
 
                 let mut subcontext = RenderContext::default();
                 subcontext.insert("content", attr.get("something").unwrap().clone());
                 let suboutput = renderer.render(&subtemplate, &subcontext)?;
-                output.push(suboutput);
-                output.append(&mut renderer.evaluate_multiple(expr, context)?);
+                output.push(suboutput.into());
+                output.push(renderer.evaluate_multiple(expr, context)?.into());
                 output.push(match context.get("blah").unwrap() {
                     ContextValue::String(s) => s,
                     _ => panic!("not a str")
-                }.clone());
+                }.clone().into());
 
                 output.push("</blah>".into());
-                Ok(output)
+                Ok(output.into())
             }))
             .build();
         let expr = r#"(html (div (blah (@ (something extra)) (span hello))))"#;
@@ -597,7 +626,6 @@ mod tests {
     fn test_variable_range_iteration() {
         let renderer = Renderer::builder()
             .build();
-        //let expr = r#"(html (body (for i in $asdf (div "iter " $i))))"#;
         let expr = r#"(html (body (for (@ (var i) (min $a) (max $b)) (div "iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()

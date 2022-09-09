@@ -1,151 +1,101 @@
-use crate::renderer::{Attributes, Renderer, RenderError, basic_html_tag};
+use crate::renderer::{Attributes, Renderer, RenderValue, RenderError, basic_html_tag};
 use crate::context::{ContextValue, RenderContext};
 use crate::template::{TemplateExprNode, TemplateTag};
 
 
-pub(crate) fn do_html(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let mut v = vec!["<!doctype html5>".into()];
-    v.append(&mut basic_html_tag("html".into(), attrs, expr, renderer, context)?);
-    Ok(v)
+pub(crate) fn do_html(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
+    let mut v: Vec<RenderValue> = vec!["<!doctype html5>".into()];
+    v.push(basic_html_tag("html".into(), attrs, expr, renderer, context)?.into());
+    Ok(v.into())
 }
 
-pub(crate) fn do_is_set(_: &Attributes, expr: &[&TemplateExprNode], _render: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_is_set(_: &Attributes, expr: &[&TemplateExprNode], _render: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     match expr.get(0) {
         Some(TemplateExprNode::Identifier(ident)) => {
             Ok(match context.get(ident) {
-                Some(ContextValue::String(value)) => {
-                    if *value == "'null".to_owned() {
-                        vec!["'false".into()]
-                    }
-                    else {
-                        vec!["'true".into()]
-                    }
-                },
-                _ => vec!["'false".into()],
+                Some(_) => RenderValue::Boolean(true),
+                None => RenderValue::Boolean(false)
             })
         },
         _ => Err(RenderError::IsSet("expected identifier".into(), expr.iter().cloned().cloned().collect()))
     }
 }
 
-pub(crate) fn do_eq(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_cmp_op<F>(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext, op: F) -> Result<RenderValue, RenderError>
+where
+    F: FnOnce(ContextValue, ContextValue) -> bool,
+{
     let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
+        .and_then(|e| {
+            match e {
+                TemplateExprNode::Identifier(ident) => Some(context.get(ident).cloned().unwrap_or(ContextValue::String(ident.clone()))),
+                TemplateExprNode::Integer(i) => Some(ContextValue::Integer(*i)),
+                TemplateExprNode::Tag(_tag) => Some(renderer.evaluate(e, context).unwrap().into()),
+            }
+        })
+        .ok_or_else(|| RenderError::Cmp("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
     let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
+        .and_then(|e| {
+            match e {
+                TemplateExprNode::Identifier(ident) => Some(context.get(ident).cloned().unwrap_or(ContextValue::String(ident.clone()))),
+                TemplateExprNode::Integer(i) => Some(ContextValue::Integer(*i)),
+                TemplateExprNode::Tag(_tag) => Some(renderer.evaluate(e, context).ok()?.into()),
+            }
+        })
+        .ok_or_else(|| RenderError::Cmp("missing expr 2".into(), expr.iter().cloned().cloned().collect()))?;
 
-    Ok(if exp1 == exp2 {
-        vec!["'true".into()]
-    }
-    else {
-        vec!["'false".into()]
-    })
-}
-
-pub(crate) fn do_mod(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
-    let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-    Ok(vec![(exp1 % exp2).to_string()])
-}
-
-pub(crate) fn do_add(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
-    let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-    Ok(vec![(exp1 + exp2).to_string()])
-}
-
-pub(crate) fn do_sub(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
-    let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-    Ok(vec![(exp1 - exp2).to_string()])
-}
-
-pub(crate) fn do_mul(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
-    let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-    Ok(vec![(exp1 * exp2).to_string()])
-}
-
-pub(crate) fn do_div(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
-    let exp1 = expr.get(0)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-
-    let exp2 = expr.get(1)
-        .and_then(|e| renderer.evaluate(e, context).ok())
-        .map(|e| e.join(""))
-        .and_then(|e| e.parse::<i32>().ok())
-        .ok_or_else(|| RenderError::Mod("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
-    Ok(vec![(exp1 / exp2).to_string()])
+    Ok(op(exp1, exp2).into())
 }
 
 
-pub(crate) fn do_if(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_math_op<F>(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext, op: F) -> Result<RenderValue, RenderError>
+where
+    F: FnOnce(i64, i64) -> i64
+{
+    let exp1 = expr.get(0)
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .and_then(|rv| rv.as_int())
+        .ok_or_else(|| RenderError::Math("missing expr 1".into(), expr.iter().cloned().cloned().collect()))?;
+
+    let exp2 = expr.get(1)
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .and_then(|rv| rv.as_int())
+        .ok_or_else(|| RenderError::Math("missing expr 2".into(), expr.iter().cloned().cloned().collect()))?;
+
+    Ok(op(exp1, exp2).into())
+}
+
+
+pub(crate) fn do_if(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let conditional = expr.get(0)
         .ok_or_else(|| RenderError::If("condition not found".into(), expr.iter().cloned().cloned().collect()))
         .cloned()?;
 
-    let result = renderer.evaluate(&conditional, context)?.join("");
+    let result = renderer.evaluate(&conditional, context)?;
+
+    let is_true = match result {
+        RenderValue::Boolean(b) => b,
+        RenderValue::String(s) if s != "" => true,
+        RenderValue::Integer(i) if i != 0 => true,
+        _ => false
+    };
 
     Ok(
-        if result == "'false" || result == "'null" {
-            match expr.get(2) {
-                Some(e) => renderer.evaluate(e, context)?,
-                None => Vec::new(),
-            }
-        }
-        else {
+        if is_true {
             renderer.evaluate(expr
                               .get(1)
                               .ok_or_else(|| RenderError::If("code block not found".into(), expr.iter().cloned().cloned().collect()))?,
                               context)?
+        }
+        else {
+            match expr.get(2) {
+                Some(e) => renderer.evaluate(e, context)?,
+                None => RenderValue::Empty,
+            }
         })
 }
 
-pub(crate) fn do_case(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_case(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let condition = expr.get(0)
         .ok_or_else(|| RenderError::Case("variant not found".into(), expr.iter().cloned().cloned().collect()))?;
 
@@ -159,28 +109,26 @@ pub(crate) fn do_case(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Ren
         (TemplateExprNode::Identifier(condition_str), ContextValue::String(switch_str)) if condition_str == switch_str => {
             renderer.evaluate_multiple(body, context)
         },
-        _ => return Ok(Vec::new())
+        _ => return Ok(RenderValue::Empty)
     }
 }
 
-pub(crate) fn do_switch(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_switch(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let variable = renderer.evaluate(expr.get(0)
                                      .ok_or_else(|| RenderError::Switch("variable not found".into(),
                                                                         expr.iter().cloned().cloned().collect()))?,
-                                     context)?.join("");
+                                     context)?;
     let cases = expr.get(1..);
     let mut context = context.clone();
-    context.insert("__switch", variable);
+    context.insert("__switch", &variable);
     Ok(cases.iter()
-       .map(|case| {
-           renderer.evaluate_multiple(&case, &context)
-       })
-       .collect::<Result<Vec<Vec<_>>, _>>()?
-       .iter()
-       .flatten()
-       .cloned()
-       .collect::<Vec<_>>())
+        .map(|case| {
+            renderer.evaluate_multiple(&case, &context)
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into())
 }
+
 
 fn parse_range(tag: &TemplateTag) -> Option<ContextValue> {
     let min = tag.children.get(0)
@@ -199,7 +147,7 @@ fn parse_range(tag: &TemplateTag) -> Option<ContextValue> {
     Some(ContextValue::Vec(range))
 }
 
-pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<Vec<String>, RenderError> {
+pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let in_position = expr.iter()
         .position(|b| {
             match b {
@@ -239,7 +187,7 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                 let val = expr.get(in_position-1)
                     .and_then(|e| {
                         match e {
-                            TemplateExprNode::Identifier(_) => renderer.evaluate(e, context).map(|e| IterType::Normal(e.join(""))).ok(),
+                            TemplateExprNode::Identifier(_) => renderer.evaluate(e, context).map(|e| IterType::Normal(e.finalize())).ok(),
                             TemplateExprNode::Tag(tag) if tag.tag == "enumerate" => {
                                 let iter = tag.children.get(0)
                                     .and_then(TemplateExprNode::as_identifier)?;
@@ -268,19 +216,16 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                        renderer.evaluate_multiple(body, &second_context)
                    })
                    .collect::<Result<Vec<_>, RenderError>>()?
-                   .iter()
-                   .flatten()
-                   .cloned()
-                   .collect())
+                   .into())
             },
             ContextValue::Object(o) => {
                 let key_var = expr.get(in_position-2)
                     .and_then(|a| renderer.evaluate(a, context).ok())
-                    .map(|e| e.join(""))
+                    .map(|e| e.finalize())
                     .ok_or_else(|| RenderError::For("missing key variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
                 let value_var = expr.get(in_position-1)
                     .and_then(|a| renderer.evaluate(a, context).ok())
-                    .map(|e| e.join(""))
+                    .map(|e| e.finalize())
                     .ok_or_else(|| RenderError::For("missing value variable to iterate over".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))?;
                 let mut second_context = context.clone();
                 Ok(o.0.iter()
@@ -290,10 +235,7 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                        renderer.evaluate_multiple(body, &second_context)
                    })
                    .collect::<Result<Vec<_>, RenderError>>()?
-                   .iter()
-                   .flatten()
-                   .cloned()
-                   .collect())
+                   .into())
             },
             _ => Err(RenderError::For("element is not iterable".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
         }
@@ -320,14 +262,11 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
             Ok((min..max)
                .step_by(step.unwrap_or(1) as usize)
                .map(|value| {
-                   second_context.insert(val, value.to_string());
+                   second_context.insert(val, value);
                    renderer.evaluate_multiple(body, &second_context)
                })
                .collect::<Result<Vec<_>, RenderError>>()?
-               .iter()
-               .flatten()
-               .cloned()
-               .collect())
+               .into())
         }
         else {
             let iterable = context
@@ -352,10 +291,7 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                            renderer.evaluate_multiple(body, &second_context)
                        })
                        .collect::<Result<Vec<_>, RenderError>>()?
-                       .iter()
-                       .flatten()
-                       .cloned()
-                       .collect())
+                       .into())
                 }
                 ContextValue::Object(o) => {
                     let key_var = attrs.get("key")
@@ -370,10 +306,7 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                            renderer.evaluate_multiple(body, &second_context)
                        })
                        .collect::<Result<Vec<_>, RenderError>>()?
-                       .iter()
-                       .flatten()
-                       .cloned()
-                       .collect())
+                       .into())
                 }
                 _ => Err(RenderError::For("iterate attribute is not an array or object".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
             }

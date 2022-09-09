@@ -1,10 +1,12 @@
 use std::collections::{HashMap, BTreeMap};
+use crate::renderer::RenderValue;
 use crate::template::Template;
 
 
 #[derive(Clone, Debug)]
 pub enum ContextValue {
     Integer(i64),
+    Boolean(bool),
     String(String),
     Vec(Vec<ContextValue>),
     Object(RenderContext),
@@ -59,6 +61,12 @@ impl From<Template> for ContextValue {
     }
 }
 
+impl From<bool> for ContextValue {
+    fn from(other: bool) -> Self {
+        ContextValue::Boolean(other)
+    }
+}
+
 // TODO: somehow make this generic over all numbers
 impl From<usize> for ContextValue {
     fn from(other: usize) -> Self {
@@ -75,6 +83,54 @@ impl From<i32> for ContextValue {
 impl From<i64> for ContextValue {
     fn from(other: i64) -> Self {
         ContextValue::Integer(other)
+    }
+}
+
+impl PartialEq for ContextValue {
+    fn eq(&self, other: &ContextValue) -> bool {
+        match (self, other) {
+            (ContextValue::Integer(a), ContextValue::Integer(b)) => a == b,
+            (ContextValue::Boolean(a), ContextValue::Boolean(b)) => a == b,
+            (ContextValue::String(a), ContextValue::String(b)) => a == b,
+            (ContextValue::Vec(a), ContextValue::Vec(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl PartialOrd for ContextValue {
+    fn partial_cmp(&self, other: &ContextValue) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (ContextValue::Integer(a), ContextValue::Integer(b)) => a.partial_cmp(b),
+            (ContextValue::Boolean(a), ContextValue::Boolean(b)) => a.partial_cmp(b),
+            (ContextValue::String(a), ContextValue::String(b)) => a.partial_cmp(b),
+            (ContextValue::Vec(a), ContextValue::Vec(b)) => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+}
+
+impl From<&RenderValue> for ContextValue {
+    fn from(other: &RenderValue) -> ContextValue {
+        match other {
+            RenderValue::String(s) => ContextValue::String(s.clone()),
+            RenderValue::Integer(i) => ContextValue::Integer(*i),
+            RenderValue::Boolean(b) => ContextValue::Boolean(*b),
+            RenderValue::Vec(v) => ContextValue::Vec(v.iter().map(|e| e.into()).collect()),
+            RenderValue::Empty => ContextValue::String("".into()),
+        }
+    }
+}
+
+impl From<RenderValue> for ContextValue {
+    fn from(other: RenderValue) -> ContextValue {
+        match other {
+            RenderValue::String(s) => ContextValue::String(s.clone()),
+            RenderValue::Integer(i) => ContextValue::Integer(i),
+            RenderValue::Boolean(b) => ContextValue::Boolean(b),
+            RenderValue::Vec(v) => ContextValue::Vec(v.iter().map(|e| e.into()).collect()),
+            RenderValue::Empty => ContextValue::String("".into()),
+        }
     }
 }
 
