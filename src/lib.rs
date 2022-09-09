@@ -732,4 +732,19 @@ mod tests {
         let html = renderer.render(&template, &context).unwrap();
         assert_eq!(html, r#"<!doctype html5><html><body>blah</body></html>"#)
     }
+
+    #[test]
+    fn test_multi_type_vec() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body $a))"#;
+        let template = Template::from_str(expr).unwrap();
+
+        let v: ContextValue = vec!["blah".into(), ContextValue::from(123), "this".into(), ContextValue::from(true)].into();
+        let context = RenderContext::builder()
+            .insert("a", v)
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body>blah123thistrue</body></html>"#)
+    }
 }
