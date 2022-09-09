@@ -136,9 +136,9 @@ assert_eq!(html, "<!doctype html5><html><body><div><h2>faketitle</h2><span>poste
 if condition evaluates to true then execute the true block, if false then execute false block.
 
 ## get
-`(get [number] [array])`
+`(get [array] [index])`
 
-`(get [key] [map])`
+`(get [map] [key])`
 
 gets an element from an array or map
 
