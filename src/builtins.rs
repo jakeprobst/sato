@@ -313,3 +313,26 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
         }
     }
 }
+
+pub(crate) fn do_get(_: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
+    let indexable = expr.get(0)
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .unwrap();
+
+    let index = expr.get(1)
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .unwrap();
+
+    match (indexable, index){
+        (RenderValue::Vec(v), RenderValue::Integer(i)) => {
+            Ok(v.get(i as usize)
+                .ok_or_else(|| RenderError::Get("array out of bounds".into(), expr.iter().cloned().cloned().collect()))?
+                .clone())
+
+        },
+        (RenderValue::Object(o), RenderValue::String(s)) => {
+            Ok(o.get(&s).ok_or_else(|| RenderError::Get("array out of bounds".into(), expr.iter().cloned().cloned().collect()))?.clone())
+        },
+        _ => Err(RenderError::Get("invalid index/indexable".into(), expr.iter().cloned().cloned().collect()))
+    }
+}

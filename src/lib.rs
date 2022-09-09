@@ -135,6 +135,13 @@ assert_eq!(html, "<!doctype html5><html><body><div><h2>faketitle</h2><span>poste
 `(if [condition] [true code block] [false code block])`
 if condition evaluates to `'true` then execute the true block, if `'false` then execute false block.
 
+## get
+`(get [number] [array])`
+
+`(get [key] [map])`
+
+gets an element from an array or map
+
 ## is-set
 `(is-set [variable])`
 
@@ -677,5 +684,52 @@ mod tests {
             .build();
         let html = renderer.render(&template, &context).unwrap();
         assert_eq!(html, r#"<!doctype html5><html><body><div>iter 3</div><div>iter 4</div><div>iter 5</div><div>iter 6</div><div>iter 7</div></body></html>"#)
+    }
+
+    #[test]
+    fn test_get_from_array() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (get $a 0) (get $a 2)))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("a", vec!["asd", "qwe", "zxc"])
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body>asdzxc</body></html>"#)
+    }
+
+    #[test]
+    fn test_get_from_object() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (get $asdf as) (get $asdf zx)))"#;
+        let template = Template::from_str(expr).unwrap();
+        let internal_obj = RenderContext::builder()
+            .insert("as", "df")
+            .insert("qw", "er")
+            .insert("zx", "cv")
+            .build();
+        let context = RenderContext::builder()
+            .insert("asdf", internal_obj)
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body>dfcv</body></html>"#)
+    }
+
+    #[test]
+    fn test_nested_gets_from_array() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (get (get $a 2) 0)))"#;
+        let template = Template::from_str(expr).unwrap();
+
+        let subvec: ContextValue = vec![ContextValue::from("blah"), "123".into(), "this".into()].into();
+        let v: ContextValue = vec!["asd".into(), "qwe".into(), subvec, "zxc".into()].into();
+        let context = RenderContext::builder()
+            .insert("a", v)
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body>blah</body></html>"#)
     }
 }

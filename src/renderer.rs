@@ -8,12 +8,13 @@ use crate::builtins;
 type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError>;
 //type NodeHandler = dyn Fn(&Attributes, &[&TemplateExprNode], &Renderer, &RenderContext) -> Result<Vec<String>, RenderError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RenderValue {
     String(String),
     Integer(i64),
     Boolean(bool),
     Vec(Vec<RenderValue>),
+    Object(HashMap<String, RenderValue>),
     Empty,
 }
 
@@ -24,6 +25,7 @@ impl RenderValue {
             RenderValue::Integer(i) => i.to_string(),
             RenderValue::Boolean(b) => b.to_string(),
             RenderValue::Vec(v) => v.into_iter().map(|e| e.finalize()).collect::<Vec<_>>().join(""),
+            RenderValue::Object(o) => o.into_iter().map(|(_k, v)| v.finalize()).collect::<Vec<_>>().join(""),
             RenderValue::Empty => "".into(),
         }
     }
@@ -63,6 +65,24 @@ impl From<i64> for RenderValue {
 impl From<bool> for RenderValue {
     fn from(other: bool) -> Self {
         RenderValue::Boolean(other)
+    }
+}
+
+impl TryFrom<&ContextValue> for RenderValue {
+    type Error = String;
+    fn try_from(other: &ContextValue) -> Result<Self, Self::Error> {
+        match other {
+            ContextValue::Integer(i) => Ok(RenderValue::Integer(*i)),
+            ContextValue::Boolean(b) => Ok(RenderValue::Boolean(*b)),
+            ContextValue::String(s) => Ok(RenderValue::String(s.clone())),
+            ContextValue::Vec(v) => Ok(RenderValue::Vec(v.iter().map(|e| RenderValue::try_from(e)).collect::<Result<Vec<_>, _>>()?)),
+            ContextValue::Object(o) => {
+                Ok(RenderValue::Object(o.0.iter()
+                                       .map(|(k, v)| Ok((k.clone(), RenderValue::try_from(v)?)))
+                                       .collect::<Result<HashMap<String,_>, String>>()?))
+            },
+            _ => Err("could not convert context value to render value".into())
+        }
     }
 }
 
@@ -144,37 +164,22 @@ pub enum RenderError {
     Switch(String, Vec<TemplateExprNode>),
     #[error("error in `for`: {0} {1:?} ({2:?})")]
     For(String, Attributes, Vec<TemplateExprNode>),
+    #[error("error in `get`: {0} {1:?}")]
+    Get(String, Vec<TemplateExprNode>),
 
     #[error("error in math operator: {0} ({1:?})")]
     Math(String, Vec<TemplateExprNode>),
 
-    #[error("error in `{0}`: {1} ({1:?})")]
+    #[error("error in `{0}`: {1} ({2:?})")]
     UserDefined(String, String, Vec<TemplateExprNode>),
+
+    #[error("error in `eval`: {0}")]
+    Evaluate(String),
+
 }
 
 pub struct Renderer {
     functions: HashMap<String, Box<NodeHandler>>,
-}
-
-fn context_to_string(cvalue: &ContextValue, renderer: &Renderer, context: &RenderContext) -> Result<String, RenderError> {
-    Ok(match cvalue {
-        ContextValue::String(s) => s.clone(),
-        ContextValue::Integer(i) => i.to_string(),
-        ContextValue::Template(t) => renderer.render(t, context)?,
-        ContextValue::Vec(v) => {
-            v.iter()
-                .map(|e| match e {
-                    ContextValue::String(s) => renderer.evaluate_string(s, context),
-                    ContextValue::Integer(i) => Ok(i.to_string()),
-                    ContextValue::Template(t) => renderer.render(t, context),
-                    ContextValue::Vec(_) => context_to_string(e, renderer, context),
-                    _ => Ok(String::new())
-                })
-                .collect::<Result<Vec<_>, _>>()?
-                .join("")
-        },
-        _ => String::new()
-    })
 }
 
 pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
@@ -192,14 +197,8 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
                             Ok((context, output))
                         },
                         Some(item) => {
-                            let eval = match item {
-                                ContextValue::Integer(i) => Some(RenderValue::Integer(*i)),
-                                ContextValue::Boolean(b) => Some(RenderValue::Boolean(*b)),
-                                ContextValue::String(s) => Some(RenderValue::String(s.clone())),
-                                ContextValue::Vec(_) => Some(RenderValue::String(context_to_string(item, renderer, &context)?)),
-                                _ => Some(RenderValue::Empty)
-                            };
-                            Ok((context, eval))
+                            let item = item.try_into().map_err(|err| RenderError::ExpandVariable(err, expr.to_string()))?;
+                            Ok((context, Some(item)))
                         },
                         None => Ok((context, output))
                     }
@@ -208,13 +207,23 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
                     .unwrap_or_else(|| expr.clone().into())
             }
             else {
-                context.0.get(&expr[1..])
-                    .map(|e| match e {
-                        ContextValue::Integer(i) => Ok(RenderValue::Integer(*i)),
-                        ContextValue::Boolean(b) => Ok(RenderValue::Boolean(*b)),
-                        ContextValue::String(s) => Ok(RenderValue::String(s.clone())),
-                        ContextValue::Vec(_) => Ok(RenderValue::String(context_to_string(e, renderer, context)?)),
-                        _ => Err(RenderError::ExpandVariable("invalid variable type".into(), expr.clone()))
+                context.get(&expr[1..])
+                    .map(|e| e.try_into())
+                    .unwrap_or(Ok(RenderValue::String(expr.clone())))
+                    .map(|e| {
+                        match e {
+                            RenderValue::Vec(v) => {
+                                Ok(RenderValue::Vec(v.iter()
+                                                    .map(|v| {
+                                                        match v {
+                                                            RenderValue::String(s) => expand_variable(s, renderer, context),
+                                                            _ => Ok(v.clone())
+                                                        }
+                                                    })
+                                                    .collect::<Result<Vec<_>, _>>()?))
+                            },
+                            _ => Ok(e)
+                        }
                     })
                     .unwrap_or(Ok(RenderValue::String(expr.clone())))?
             }
@@ -255,6 +264,7 @@ fn standard_issue_functions() -> HashMap<String, Box<NodeHandler>> {
     functions.insert("switch".into(), Box::new(builtins::do_switch));
     functions.insert("case".into(), Box::new(builtins::do_case));
     functions.insert("for".into(), Box::new(builtins::do_for));
+    functions.insert("get".into(), Box::new(builtins::do_get));
 
     functions.insert("eq".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q == w)));
     functions.insert("lt".into(), Box::new(|a,e,r,c| builtins::do_cmp_op(a,e,r,c, |q, w| q < w)));
