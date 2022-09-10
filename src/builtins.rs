@@ -189,9 +189,9 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                         match e {
                             TemplateExprNode::Identifier(_) => renderer.evaluate(e, context).map(|e| IterType::Normal(e.finalize())).ok(),
                             TemplateExprNode::Tag(tag) if tag.tag == "enumerate" => {
-                                let iter = tag.children.get(0)
+                                let index = tag.children.get(0)
                                     .and_then(TemplateExprNode::as_identifier)?;
-                                let index = tag.children.get(1)
+                                let iter = tag.children.get(1)
                                     .and_then(TemplateExprNode::as_identifier)?;
                                 Some(IterType::Enum(iter.clone(), index.clone()))
                             },

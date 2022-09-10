@@ -157,6 +157,8 @@ takes a single argument and returns true or false depending if the variable is s
 
 `(for [item] in (range [min] [max] [step?]) [code block])`
 
+`(for (enumerate [index] [item]) in [array] [code block])`
+
 executes code block for each element in the iterable.
 
 ## eq/gt/lt/gte/lte/ne
