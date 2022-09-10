@@ -32,7 +32,7 @@ impl TryFrom<String> for TemplateExprNode {
     type Error = TemplateError;
     
     fn try_from(other: String) -> Result<TemplateExprNode, Self::Error> {
-        Ok(parse_expr(&sexp::parse(&other)?)?)
+        Ok(parse_expr(&sexp::parse(&other).map_err(|err| TemplateError::ParseError(err, other.into()))?)?)
     }
 }
 
@@ -114,7 +114,7 @@ pub enum TemplateError {
     #[error("invalid file")]
     InvalidFile,
     #[error("error parsing template")]
-    ParseError(#[from] Box<sexp::Error>),
+    ParseError(Box<sexp::Error>, String),
     #[error("error parsing template expression")]
     ParseExprError(#[from] ParseExprError),
 }
@@ -129,7 +129,7 @@ pub struct Template {
 impl Template {
     pub fn from_str(template: &str) -> Result<Template, TemplateError> {
         Ok(Template {
-            expr: parse_expr(&sexp::parse(template)?)?
+            expr: parse_expr(&sexp::parse(template).map_err(|err| TemplateError::ParseError(err, template.into()))?)?
         })
     }
 
