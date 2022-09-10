@@ -223,6 +223,16 @@ mod tests {
     }
 
     #[test]
+    fn test_attributes_on_empty_tag() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (@ (asdf qwer))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let html = renderer.render(&template, &RenderContext::default()).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body asdf="qwer" /></html>"#)
+    }
+
+    #[test]
     fn test_basic_substitution() {
         let renderer = Renderer::builder()
             .build();
