@@ -5,7 +5,7 @@ use crate::context::{ContextValue, RenderContext};
 use crate::template::{Template, TemplateExprNode};
 use crate::builtins;
 
-type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError>;
+type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError> + Send + Sync;
 
 #[derive(Debug, Clone)]
 pub enum RenderValue {
