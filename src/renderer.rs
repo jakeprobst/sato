@@ -327,6 +327,12 @@ impl Renderer {
     }
 }
 
+impl Default for Renderer {
+    fn default() -> Renderer {
+        Renderer::builder().build()
+    }
+}
+
 
 pub struct RendererBuilder {
     functions: HashMap<String, Box<NodeHandler>>,

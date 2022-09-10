@@ -1,6 +1,6 @@
 [package]
 name = "sato"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "some sort of s-expr based html templating system"
 repository = "https://github.com/jakeprobst/sato"
