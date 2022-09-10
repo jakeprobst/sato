@@ -289,19 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn test_alternate_array_iteration() {
-        let renderer = Renderer::builder()
-            .build();
-        let expr = r#"(html (body (for (@ (var i) (iterate $asdf)) (div "iter " $i))))"#;
-        let template = Template::from_str(expr).unwrap();
-        let context = RenderContext::builder()
-            .insert("asdf", vec!["qaz", "wsx", "edc"])
-            .build();
-        let html = renderer.render(&template, &context).unwrap();
-        assert_eq!(html, r#"<!doctype html5><html><body><div>iter qaz</div><div>iter wsx</div><div>iter edc</div></body></html>"#)
-    }
-
-    #[test]
     fn test_range_iteration() {
         let renderer = Renderer::builder()
             .build();
@@ -325,50 +312,10 @@ mod tests {
     }
 
     #[test]
-    fn test_alternate_array_index_iteration() {
-        let renderer = Renderer::builder()
-            .build();
-        let expr = r#"(html (body (for (@ (var i) (index k) (iterate $asdf)) (div $k ": iter " $i))))"#;
-        let template = Template::from_str(expr).unwrap();
-        let context = RenderContext::builder()
-            .insert("asdf", vec!["qaz", "wsx", "edc"])
-            .build();
-        let html = renderer.render(&template, &context).unwrap();
-        assert_eq!(html, r#"<!doctype html5><html><body><div>0: iter qaz</div><div>1: iter wsx</div><div>2: iter edc</div></body></html>"#)
-    }
-
-    #[test]
-    fn test_alternate_range_iteration() {
-        let renderer = Renderer::builder()
-            .build();
-        let expr = r#"(html (body (for (@ (var i) (min 0) (max 3)) (div "iter " $i))))"#;
-        let template = Template::from_str(expr).unwrap();
-        let html = renderer.render(&template, &RenderContext::default()).unwrap();
-        assert_eq!(html, r#"<!doctype html5><html><body><div>iter 0</div><div>iter 1</div><div>iter 2</div></body></html>"#)
-    }
-
-    #[test]
     fn test_object_iteration() {
         let renderer = Renderer::builder()
             .build();
         let expr = r#"(html (body (for k v in $asdf (div "key " $k ", value " $v))))"#;
-        let template = Template::from_str(expr).unwrap();
-        let internal_obj = RenderContext::builder()
-            .insert("as", "df")
-            .insert("qw", "er")
-            .build();
-        let context = RenderContext::builder()
-            .insert("asdf", internal_obj)
-            .build();
-        let html = renderer.render(&template, &context).unwrap();
-        assert_eq!(html, r#"<!doctype html5><html><body><div>key as, value df</div><div>key qw, value er</div></body></html>"#)
-    }
-
-    #[test]
-    fn test_alternate_object_iteration() {
-        let renderer = Renderer::builder()
-            .build();
-        let expr = r#"(html (body (for (@ (key k) (value v) (iterate $asdf)) (div "key " $k ", value " $v))))"#;
         let template = Template::from_str(expr).unwrap();
         let internal_obj = RenderContext::builder()
             .insert("as", "df")
@@ -442,7 +389,7 @@ mod tests {
     fn test_object_variable_in_attributes() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (for (@ (var qw) (iterate $as)) (div (@ (class $qw.er)) $qw.zx)))"#;
+        let expr = r#"(html (for qw in $as (div (@ (class $qw.er)) $qw.zx)))"#;
         let template = Template::from_str(expr).unwrap();
 
         let obj1 = RenderContext::builder()
@@ -625,7 +572,7 @@ mod tests {
     fn test_math_op_mod() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (body (for (@ (var i) (min 0) (max 5)) (if (eq (% $i 2) 0) (div $i)))))"#;
+        let expr = r#"(html (body (for i in (range 0 5) (if (eq (% $i 2) 0) (div $i)))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()
             .build();
@@ -637,7 +584,7 @@ mod tests {
     fn test_variable_range_iteration() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (body (for (@ (var i) (min $a) (max $b)) (div "iter " $i))))"#;
+        let expr = r#"(html (body (for i in (range $a $b) (div "iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()
             .insert("a", 4)
@@ -677,10 +624,10 @@ mod tests {
     }
 
     #[test]
-    fn test_math_ops_in_for_min_max() {
+    fn test_math_ops_in_for_range() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (body (for (@ (var i) (min (- $b $a)) (max (+ $b 1))) (div "iter " $i))))"#;
+        let expr = r#"(html (body (for i in (range (- $b $a) (+ $b 1)) (div "iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()
             .insert("a", 4)
