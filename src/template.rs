@@ -3,10 +3,10 @@ use crate::renderer::{Attribute, Attributes};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseExprError {
-    #[error("expr is not an item")]
-    NotAnItem,
-    #[error("expr is not a list")]
-    NotAList,
+    #[error("expr is not an atom: {0:?}")]
+    NotAnAtom(sexp::Atom),
+    #[error("expr is not a list: {0:?}")]
+    NotAList(Vec<sexp::Sexp>),
     #[error("@ attribute is not a list {0:?} {1:?}")]
     NotAnAttribute(sexp::Sexp, Vec<sexp::Sexp>),
     #[error("html attribute is missing an element {0:?}")]
@@ -80,13 +80,13 @@ fn parse_expr(expr: &sexp::Sexp) -> Result<TemplateExprNode, ParseExprError> {
                 sexp::Atom::S(s) => TemplateExprNode::Identifier(s.to_string()),
                 sexp::Atom::I(i) => TemplateExprNode::Integer(*i),
                 //sexp::Atom::I(i) => TemplateExprNode::Integer(i),
-                _ => panic!("expr is not an atom {:?}", atom),
+                _ => return Err(ParseExprError::NotAnAtom(atom.clone()))
             }
         },
         sexp::Sexp::List(list) => {
             let tag = match list[0] {
                 sexp::Sexp::Atom(sexp::Atom::S(ref s)) => s.clone(),
-                _ => panic!("expr is not a list")
+                _ => return Err(ParseExprError::NotAList(list.clone()))
             };
             let (attrs, attr_index) = match &list.get(1) {
                 Some(sexp::Sexp::List(list)) if list.get(0) == Some(&sexp::Sexp::Atom(sexp::Atom::S("@".into()))) => (parse_attrs(&list)?, 2),
