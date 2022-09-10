@@ -179,6 +179,10 @@ pub mod context;
 pub mod renderer;
 pub mod template;
 
+pub use crate::renderer::{Renderer, RenderValue, Attribute, Attributes, RenderError};
+pub use crate::template::{Template, TemplateExprNode};
+pub use crate::context::{RenderContext, ContextValue};
+
 
 #[cfg(test)]
 mod tests {
