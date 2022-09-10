@@ -303,8 +303,15 @@ impl Renderer {
                 (*i).into()
             },
             TemplateExprNode::Tag(tag) => {
+                let eval_attrs = Attributes(tag.attrs
+                    .0
+                    .iter()
+                    .map(|attr| {
+                        Ok(Attribute(self.evaluate_string(&attr.0, context)?, self.evaluate_string(&attr.1, context)?))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?);
                 match self.functions.get(&tag.tag) {
-                    Some(op_func) => op_func(&tag.attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
+                    Some(op_func) => op_func(&eval_attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
                     None => basic_html_tag(tag.tag.clone(), &tag.attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
                 }
             },

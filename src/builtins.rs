@@ -130,13 +130,16 @@ pub(crate) fn do_switch(_: &Attributes, expr: &[&TemplateExprNode], renderer: &R
 }
 
 
-fn parse_range(tag: &TemplateTag) -> Option<ContextValue> {
+fn parse_range(tag: &TemplateTag, renderer: &Renderer, context: &RenderContext) -> Option<ContextValue> {
     let min = tag.children.get(0)
-        .and_then(TemplateExprNode::as_integer)?;
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .and_then(|e| e.as_int())?;
     let max = tag.children.get(1)
-        .and_then(TemplateExprNode::as_integer)?;
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .and_then(|e| e.as_int())?;
     let step = tag.children.get(2)
-        .and_then(TemplateExprNode::as_integer)
+        .and_then(|e| renderer.evaluate(e, context).ok())
+        .and_then(|e| e.as_int())
         .unwrap_or(1) as usize;
 
     let range = (min..max)
@@ -167,7 +170,7 @@ pub(crate) fn do_for(attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &
                             .ok_or_else(|| RenderError::For("iterable is not a variable".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
                     },
                     TemplateExprNode::Tag(tag) if tag.tag == "range" => {
-                        parse_range(tag)
+                        parse_range(tag, renderer, context)
                             .ok_or_else(|| RenderError::For("invalid range".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
                     },
                     _ => Err(RenderError::For("iteration variable is not a valid type".into(), attrs.clone(), expr.iter().cloned().cloned().collect()))
