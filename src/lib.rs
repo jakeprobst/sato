@@ -171,8 +171,6 @@ standard math operators
 
 `(+ [item] [item])`
 
-
-
 */
 
 
@@ -313,7 +311,7 @@ mod tests {
     fn test_array_index_iteration() {
         let renderer = Renderer::builder()
             .build();
-        let expr = r#"(html (body (for (enumerate i k) in $asdf (div $k ": iter " $i))))"#;
+        let expr = r#"(html (body (for (enumerate k i) in $asdf (div $k ": iter " $i))))"#;
         let template = Template::from_str(expr).unwrap();
         let context = RenderContext::builder()
             .insert("asdf", vec!["qaz", "wsx", "edc"])

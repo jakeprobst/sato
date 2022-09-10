@@ -6,7 +6,6 @@ use crate::template::{Template, TemplateExprNode};
 use crate::builtins;
 
 type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError>;
-//type NodeHandler = dyn Fn(&Attributes, &[&TemplateExprNode], &Renderer, &RenderContext) -> Result<Vec<String>, RenderError>;
 
 #[derive(Debug, Clone)]
 pub enum RenderValue {
