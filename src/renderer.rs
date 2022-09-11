@@ -315,16 +315,6 @@ impl Renderer {
         })
     }
 
-    pub fn evaluate_string(&self, expr: &String, context: &RenderContext) -> Result<String, RenderError> {
-        Ok(
-            if let Ok(expr) = TemplateExprNode::try_from(expr.clone()) {
-                self.evaluate(&expr, context)?.finalize()
-            }
-            else {
-                expand_variable(expr, self, context)?.finalize()
-            })
-    }
-
     pub fn render(&self, template: &Template, context: &RenderContext) -> Result<String, RenderError> {
         Ok(self.evaluate(&template.expr, context)?.finalize())
     }
