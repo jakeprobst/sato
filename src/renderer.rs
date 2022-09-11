@@ -5,7 +5,7 @@ use crate::context::{ContextValue, RenderContext};
 use crate::template::{Template, TemplateExprNode};
 use crate::builtins;
 
-type NodeHandler = dyn for<'a> Fn(&'a Attributes, &'a [&'a TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError> + Send + Sync;
+type NodeHandler = dyn for<'a> Fn(Attributes, &[TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError> + Send + Sync;
 
 #[derive(Debug, Clone)]
 pub enum RenderValue {
@@ -233,7 +233,7 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
     )
 }
 
-pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[&TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
+pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let mut l = Vec::<RenderValue>::new();
     let attr_str = attrs.0.iter()
         .map(|attr| {
@@ -286,10 +286,10 @@ impl Renderer {
         RendererBuilder::new()
     }
 
-    pub fn evaluate_multiple(&self, expr: &[&TemplateExprNode], context: &RenderContext) -> Result<RenderValue, RenderError> {
+    pub fn evaluate_multiple(&self, expr: &[TemplateExprNode], context: &RenderContext) -> Result<RenderValue, RenderError> {
         Ok(expr
-           .iter()
-           .map(|e| self.evaluate(e, context))
+           .into_iter()
+           .map(|e| self.evaluate(&e, context))
            .collect::<Result<Vec<_>, _>>()?
            .into())
     }
@@ -297,7 +297,7 @@ impl Renderer {
     pub fn evaluate(&self, expr: &TemplateExprNode, context: &RenderContext) -> Result<RenderValue, RenderError> {
         Ok(match expr {
             TemplateExprNode::Identifier(ident) => {
-                expand_variable(ident, self, context)?
+                expand_variable(&ident, self, context)?
             },
             TemplateExprNode::Integer(i) => {
                 (*i).into()
@@ -311,8 +311,8 @@ impl Renderer {
                     })
                     .collect::<Result<Vec<_>, _>>()?);
                 match self.functions.get(&tag.tag) {
-                    Some(op_func) => op_func(&eval_attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
-                    None => basic_html_tag(tag.tag.clone(), &tag.attrs, &tag.children.iter().collect::<Vec<_>>(), self, context)?,
+                    Some(op_func) => op_func(eval_attrs, &tag.children, self, context)?,
+                    None => basic_html_tag(tag.tag.clone(), &tag.attrs, &tag.children, self, context)?,
                 }
             },
         })

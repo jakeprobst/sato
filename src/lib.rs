@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_custom_function() {
-        fn blah(_: &crate::renderer::Attributes, _: &[&TemplateExprNode], _: &Renderer, _: &RenderContext) -> Result<RenderValue, crate::renderer::RenderError> {
+        fn blah(_: crate::renderer::Attributes, _: &[TemplateExprNode], _: &Renderer, _: &RenderContext) -> Result<RenderValue, crate::renderer::RenderError> {
             Ok("hello there".into())
         }
 
@@ -465,7 +465,7 @@ mod tests {
             .function("blah", Box::new(|attrs, _, _, _| {
                 let mut output: Vec<String> = Vec::new();
 
-                for attr in attrs {
+                for attr in &attrs {
                     output.push("[".into());
                     output.push(attr.0.clone());
                     output.push(" = ".into());
