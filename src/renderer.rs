@@ -237,9 +237,7 @@ pub(crate) fn basic_html_tag(tag: String, attrs: &Attributes, expr: &[TemplateEx
     let mut l = Vec::<RenderValue>::new();
     let attr_str = attrs.0.iter()
         .map(|attr| {
-            let key = renderer.evaluate_string(&attr.0, context)?;
-            let value = renderer.evaluate_string(&attr.1, context)?;
-            Ok(format!(" {}=\"{}\"", key, value))
+            Ok(format!(" {}=\"{}\"", attr.0, attr.1))
         })
         .collect::<Result<Vec<_>, RenderError>>()?
         .join("");
@@ -304,15 +302,14 @@ impl Renderer {
             },
             TemplateExprNode::Tag(tag) => {
                 let eval_attrs = Attributes(tag.attrs
-                    .0
                     .iter()
                     .map(|attr| {
-                        Ok(Attribute(self.evaluate_string(&attr.0, context)?, self.evaluate_string(&attr.1, context)?))
+                        Ok(Attribute(self.evaluate(&attr.0, context)?.finalize(), self.evaluate_multiple(&attr.1, context)?.finalize()))
                     })
                     .collect::<Result<Vec<_>, _>>()?);
                 match self.functions.get(&tag.tag) {
                     Some(op_func) => op_func(eval_attrs, &tag.children, self, context)?,
-                    None => basic_html_tag(tag.tag.clone(), &tag.attrs, &tag.children, self, context)?,
+                    None => basic_html_tag(tag.tag.clone(), &eval_attrs, &tag.children, self, context)?,
                 }
             },
         })

@@ -1,5 +1,4 @@
 use std::io::Read;
-use crate::renderer::{Attribute, Attributes};
 
 #[derive(thiserror::Error, Debug)]
 pub enum ParseExprError {
@@ -13,11 +12,13 @@ pub enum ParseExprError {
     AttributeMissingElement(Vec<sexp::Sexp>),
 }
 
+#[derive(Debug, Clone)]
+pub struct TemplateAttribute(pub TemplateExprNode, pub Vec<TemplateExprNode>);
 
 #[derive(Debug, Clone)]
 pub struct TemplateTag {
     pub tag: String,
-    pub attrs: Attributes,
+    pub attrs: Vec<TemplateAttribute>,
     pub children: Vec<TemplateExprNode>,
 }
 
@@ -52,20 +53,23 @@ impl TemplateExprNode {
     }
 }
 
-fn parse_attrs(attrs: &Vec<sexp::Sexp>) -> Result<Vec<Attribute>, ParseExprError> {
+fn parse_attrs(attrs: &Vec<sexp::Sexp>) -> Result<Vec<TemplateAttribute>, ParseExprError> {
     attrs.iter().skip(1)
         .map(|attr| {
             match attr {
                 sexp::Sexp::List(list) => {
-                    let name = list
+                    let name = parse_expr(list
                         .get(0)
-                        .ok_or_else(|| ParseExprError::AttributeMissingElement(attrs.clone()))?
-                        .to_string();
+                        .ok_or_else(|| ParseExprError::AttributeMissingElement(attrs.clone()))?)?;
                     let value = list
-                        .get(1)
+                        .get(1..)
                         .ok_or_else(|| ParseExprError::AttributeMissingElement(attrs.clone()))?
-                        .to_string();
-                    Ok(Attribute(name, value))
+                        .iter()
+                        .map(|v| {
+                            parse_expr(v)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(TemplateAttribute(name, value))
                 }
                 _ => Err(ParseExprError::NotAnAttribute(attr.clone(), attrs.clone()))
             }
@@ -99,7 +103,7 @@ fn parse_expr(expr: &sexp::Sexp) -> Result<TemplateExprNode, ParseExprError> {
 
             TemplateExprNode::Tag(TemplateTag {
                 tag,
-                attrs: Attributes::new(attrs),
+                attrs,
                 children,
             })
         }

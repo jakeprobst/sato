@@ -708,4 +708,31 @@ mod tests {
         let html = renderer.render(&template, &context).unwrap();
         assert_eq!(html, r#"<!doctype html5><html><body>blah123thistrue</body></html>"#)
     }
+
+    #[test]
+    fn test_multielement_attributes() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (@ (asdf this that) (some thing $a))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("a", "blah")
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body asdf="thisthat" some="thingblah" /></html>"#)
+    }
+
+    #[test]
+    fn test_var_in_both_attribute_positions() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (body (@ ($b asdf $a))))"#;
+        let template = Template::from_str(expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("a", "blah")
+            .insert("b", "this")
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body this="asdfblah" /></html>"#)
+    }
 }
