@@ -53,6 +53,30 @@ impl TemplateExprNode {
     }
 }
 
+pub fn get_children_by_tag(expr: &[TemplateExprNode], tag_name: &str) -> Vec<TemplateTag> {
+    expr
+        .iter()
+        .map(|e| {
+            if let TemplateExprNode::Tag(tag) = e {
+                if tag.tag == tag_name {
+                    std::iter::once(tag)
+                        .chain(get_children_by_tag(&tag.children, tag_name).iter())
+                        .cloned()
+                        .collect()
+                }
+                else {
+                    get_children_by_tag(&tag.children, tag_name)
+                }
+            }
+            else {
+                Vec::new()
+            }
+        })
+        .flatten()
+        .collect()
+}
+
+
 fn parse_attrs(attrs: &Vec<sexp::Sexp>) -> Result<Vec<TemplateAttribute>, ParseExprError> {
     attrs.iter().skip(1)
         .map(|attr| {
