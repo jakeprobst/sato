@@ -147,7 +147,7 @@ pub enum TemplateError {
 
 #[derive(Clone, Debug)]
 pub struct Template {
-    pub(crate) expr: TemplateExprNode,
+    pub expr: TemplateExprNode,
 }
 
 impl Template {
