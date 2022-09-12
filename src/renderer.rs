@@ -35,6 +35,17 @@ impl RenderValue {
             _ => None
         }
     }
+
+    pub fn join(&self) -> RenderValue {
+        match self {
+            RenderValue::String(_) => self.clone(),
+            RenderValue::Integer(_) => self.clone(),
+            RenderValue::Boolean(_) => self.clone(),
+            RenderValue::Vec(v) => RenderValue::String(v.iter().map(|e| e.clone().finalize()).collect::<Vec<_>>().join("")),
+            RenderValue::Object(o) => RenderValue::String(o.iter().map(|(_k, v)| v.clone().finalize()).collect::<Vec<_>>().join("")),
+            RenderValue::Empty => self.clone(),
+        }
+    }
 }
 
 impl From<&str> for RenderValue {
