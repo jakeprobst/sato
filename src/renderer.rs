@@ -29,6 +29,13 @@ impl RenderValue {
         }
     }
 
+    pub fn as_string(&self) -> Option<&String> {
+        match self {
+            RenderValue::String(s) => Some(s),
+            _ => None
+        }
+    }
+
     pub fn as_int(&self) -> Option<i64> {
         match self {
             RenderValue::Integer(i) => Some(*i),
