@@ -76,7 +76,6 @@ pub fn get_children_by_tag(expr: &[TemplateExprNode], tag_name: &str) -> Vec<Tem
         .collect()
 }
 
-
 fn parse_attrs(attrs: &Vec<sexp::Sexp>) -> Result<Vec<TemplateAttribute>, ParseExprError> {
     attrs.iter().skip(1)
         .map(|attr| {
@@ -134,7 +133,6 @@ fn parse_expr(expr: &sexp::Sexp) -> Result<TemplateExprNode, ParseExprError> {
     })
 }
 
-
 #[derive(thiserror::Error, Debug)]
 pub enum TemplateError {
     #[error("could not find template file")]
@@ -147,12 +145,10 @@ pub enum TemplateError {
     ParseExprError(#[from] ParseExprError),
 }
 
-
 #[derive(Clone, Debug)]
 pub struct Template {
     pub(crate) expr: TemplateExprNode,
 }
-
 
 impl Template {
     pub fn from_str(template: &str) -> Result<Template, TemplateError> {
@@ -168,4 +164,3 @@ impl Template {
         Template::from_str(&s)
     }
 }
-
