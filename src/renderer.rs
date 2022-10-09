@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::convert::{From, Into};
 
 use crate::context::{ContextValue, RenderContext};
-use crate::template::{Template, TemplateExprNode};
+use crate::template::{Template, TemplateExprNode, TemplateAttribute};
 use crate::builtins;
 
 type NodeHandler = dyn for<'a> Fn(Attributes, &[TemplateExprNode], &'a Renderer, &'a RenderContext) -> Result<RenderValue, RenderError> + Send + Sync;
@@ -310,6 +310,15 @@ impl Renderer {
            .into())
     }
 
+    pub fn evaluate_attrs(&self, attrs: &Vec<TemplateAttribute>, context: &RenderContext) -> Result<Attributes, RenderError> {
+        Ok(Attributes(attrs
+                      .iter()
+                      .map(|attr| {
+                          Ok(Attribute(self.evaluate(&attr.0, context)?.finalize(), self.evaluate_multiple(&attr.1, context)?.finalize()))
+                      })
+                      .collect::<Result<Vec<_>, _>>()?))
+    }
+
     pub fn evaluate(&self, expr: &TemplateExprNode, context: &RenderContext) -> Result<RenderValue, RenderError> {
         Ok(match expr {
             TemplateExprNode::Identifier(ident) => {
@@ -319,12 +328,7 @@ impl Renderer {
                 (*i).into()
             },
             TemplateExprNode::Tag(tag) => {
-                let eval_attrs = Attributes(tag.attrs
-                    .iter()
-                    .map(|attr| {
-                        Ok(Attribute(self.evaluate(&attr.0, context)?.finalize(), self.evaluate_multiple(&attr.1, context)?.finalize()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?);
+                let eval_attrs = self.evaluate_attrs(&tag.attrs, context)?;
                 match self.functions.get(&tag.tag) {
                     Some(op_func) => op_func(eval_attrs, &tag.children, self, context)?,
                     None => basic_html_tag(tag.tag.clone(), &eval_attrs, &tag.children, self, context)?,
