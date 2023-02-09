@@ -735,4 +735,20 @@ mod tests {
         let html = renderer.render(&template, &context).unwrap();
         assert_eq!(html, r#"<!doctype html5><html><body this="asdfblah" /></html>"#)
     }
+
+    #[test]
+    fn test_template_as_context_variable() {
+        let renderer = Renderer::builder()
+            .build();
+        let main_expr = r#"(html (body $body))"#;
+        let main_template = Template::from_str(main_expr).unwrap();
+        let sub_expr = r#"(span hello)"#;
+        let sub_template = Template::from_str(sub_expr).unwrap();
+        let context = RenderContext::builder()
+            .insert("body", sub_template)
+            .build();
+        let html = renderer.render(&main_template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html><body><span>hello</span></body></html>"#)
+    }
+
 }

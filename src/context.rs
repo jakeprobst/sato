@@ -118,6 +118,7 @@ impl From<&RenderValue> for ContextValue {
             RenderValue::Boolean(b) => ContextValue::Boolean(*b),
             RenderValue::Vec(v) => ContextValue::Vec(v.iter().map(|e| e.into()).collect()),
             RenderValue::Object(o) => ContextValue::Object(RenderContext(o.iter().map(|(k, v)| (k.clone(), v.into())).collect())),
+            RenderValue::Template(t) => ContextValue::Template(t.clone()),
             RenderValue::Empty => ContextValue::String("".into()),
         }
     }
@@ -131,6 +132,7 @@ impl From<RenderValue> for ContextValue {
             RenderValue::Boolean(b) => ContextValue::Boolean(b),
             RenderValue::Vec(v) => ContextValue::Vec(v.iter().map(|e| e.into()).collect()),
             RenderValue::Object(o) => ContextValue::Object(RenderContext(o.iter().map(|(k, v)| (k.clone(), v.into())).collect())),
+            RenderValue::Template(t) => ContextValue::Template(t),
             RenderValue::Empty => ContextValue::String("".into()),
         }
     }

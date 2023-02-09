@@ -14,6 +14,7 @@ pub enum RenderValue {
     Boolean(bool),
     Vec(Vec<RenderValue>),
     Object(HashMap<String, RenderValue>),
+    Template(Template),
     Empty,
 }
 
@@ -25,6 +26,7 @@ impl RenderValue {
             RenderValue::Boolean(b) => b.to_string(),
             RenderValue::Vec(v) => v.into_iter().map(|e| e.finalize()).collect::<Vec<_>>().join(""),
             RenderValue::Object(o) => o.into_iter().map(|(_k, v)| v.finalize()).collect::<Vec<_>>().join(""),
+            RenderValue::Template(_t) => "".into(),
             RenderValue::Empty => "".into(),
         }
     }
@@ -50,6 +52,7 @@ impl RenderValue {
             RenderValue::Boolean(_) => self.clone(),
             RenderValue::Vec(v) => RenderValue::String(v.iter().map(|e| e.clone().finalize()).collect::<Vec<_>>().join("")),
             RenderValue::Object(o) => RenderValue::String(o.iter().map(|(_k, v)| v.clone().finalize()).collect::<Vec<_>>().join("")),
+            RenderValue::Template(_) => self.clone(),
             RenderValue::Empty => self.clone(),
         }
     }
@@ -85,20 +88,19 @@ impl From<bool> for RenderValue {
     }
 }
 
-impl TryFrom<&ContextValue> for RenderValue {
-    type Error = String;
-    fn try_from(other: &ContextValue) -> Result<Self, Self::Error> {
+impl From<&ContextValue> for RenderValue {
+    fn from(other: &ContextValue) -> Self {
         match other {
-            ContextValue::Integer(i) => Ok(RenderValue::Integer(*i)),
-            ContextValue::Boolean(b) => Ok(RenderValue::Boolean(*b)),
-            ContextValue::String(s) => Ok(RenderValue::String(s.clone())),
-            ContextValue::Vec(v) => Ok(RenderValue::Vec(v.iter().map(|e| RenderValue::try_from(e)).collect::<Result<Vec<_>, _>>()?)),
+            ContextValue::Integer(i) => RenderValue::Integer(*i),
+            ContextValue::Boolean(b) => RenderValue::Boolean(*b),
+            ContextValue::String(s) => RenderValue::String(s.clone()),
+            ContextValue::Vec(v) => RenderValue::Vec(v.iter().map(|e| RenderValue::from(e)).collect::<Vec<_>>()),
             ContextValue::Object(o) => {
-                Ok(RenderValue::Object(o.0.iter()
-                                       .map(|(k, v)| Ok((k.clone(), RenderValue::try_from(v)?)))
-                                       .collect::<Result<HashMap<String,_>, String>>()?))
+                RenderValue::Object(o.0.iter()
+                                       .map(|(k, v)| (k.clone(), RenderValue::from(v)))
+                                       .collect::<HashMap<String, RenderValue>>())
             },
-            _ => Err("could not convert context value to render value".into())
+            ContextValue::Template(t) => RenderValue::Template(t.clone()),
         }
     }
 }
@@ -214,7 +216,7 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
                             Ok((context, output))
                         },
                         Some(item) => {
-                            let item = item.try_into().map_err(|err| RenderError::ExpandVariable(err, expr.to_string()))?;
+                            let item = item.into();
                             Ok((context, Some(item)))
                         },
                         None => Ok((context, output))
@@ -239,6 +241,9 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
                                                     })
                                                     .collect::<Result<Vec<_>, _>>()?))
                             },
+                            RenderValue::Template(t) => {
+                                Ok(RenderValue::String(renderer.render(&t, context)?))
+                            }
                             _ => Ok(e)
                         }
                     })
