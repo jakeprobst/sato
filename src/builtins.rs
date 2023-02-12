@@ -69,7 +69,6 @@ where
 pub(crate) fn do_if(_: Attributes, expr: &[TemplateExprNode], renderer: &Renderer, context: &RenderContext) -> Result<RenderValue, RenderError> {
     let conditional = expr.get(0)
         .ok_or_else(|| RenderError::If("condition not found".into(), expr.to_vec()))?;
-        //.cloned()?;
 
     let result = renderer.evaluate(conditional, context)?;
 

@@ -219,7 +219,7 @@ pub(crate) fn expand_variable(expr: &String, renderer: &Renderer, context: &Rend
                             let item = item.into();
                             Ok((context, Some(item)))
                         },
-                        None => Ok((context, output))
+                        None => Ok((context, Some(RenderValue::Boolean(false))))
                     }
                 })?
                     .1

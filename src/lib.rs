@@ -780,4 +780,21 @@ mod tests {
 
         assert_eq!(html, r#"<!doctype html5><html><div>1[23]</div><div>2[34]</div></html>"#)
     }
+
+    #[test]
+    fn test_if_unset_var_defaults_to_false() {
+        let renderer = Renderer::builder()
+            .build();
+        let expr = r#"(html (if $as.df 1 2))"#;
+        let template = Template::from_str(expr).unwrap();
+
+        let subcontext = RenderContext::builder()
+            .build();
+
+        let context = RenderContext::builder()
+            .insert("as", subcontext)
+            .build();
+        let html = renderer.render(&template, &context).unwrap();
+        assert_eq!(html, r#"<!doctype html5><html>2</html>"#)
+    }
 }
