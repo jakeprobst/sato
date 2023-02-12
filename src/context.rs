@@ -86,6 +86,12 @@ impl From<i64> for ContextValue {
     }
 }
 
+impl From<u32> for ContextValue {
+    fn from(other: u32) -> Self {
+        ContextValue::Integer(other as i64)
+    }
+}
+
 impl PartialEq for ContextValue {
     fn eq(&self, other: &ContextValue) -> bool {
         match (self, other) {
