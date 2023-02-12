@@ -751,4 +751,33 @@ mod tests {
         assert_eq!(html, r#"<!doctype html5><html><body><span>hello</span></body></html>"#)
     }
 
+    #[test]
+    fn test_nested_for() {
+        let renderer = Renderer::builder()
+            .build();
+        let main_expr = r#"(html
+                            (for item in $items
+                                 (div $item.item
+                                      [(for id in $item.sub
+                                            $id)])))"#;
+
+        let items = [1, 2]
+            .into_iter()
+            .map(|i| {
+                RenderContext::builder()
+                    .insert("item", i)
+                    .insert("sub", vec![i+1, i+2])
+                    .build()
+            })
+            .collect::<Vec<_>>();
+
+        let context = RenderContext::builder()
+            .insert("items", items)
+            .build();
+
+        let main_template = Template::from_str(main_expr).unwrap();
+        let html = renderer.render(&main_template, &context).unwrap();
+
+        assert_eq!(html, r#"<!doctype html5><html><div>1[23]</div><div>2[34]</div></html>"#)
+    }
 }

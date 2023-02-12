@@ -163,10 +163,8 @@ pub(crate) fn do_for(attrs: Attributes, expr: &[TemplateExprNode], renderer: &Re
             .map(|e| {
                 match e {
                     TemplateExprNode::Identifier(ident) => {
-                        context
-                            .get(ident)
-                            .cloned()
-                            .ok_or_else(|| RenderError::For("iterable is not a variable".into(), attrs.clone(), expr.to_vec()))
+                        crate::renderer::expand_variable(ident, renderer, context)
+                            .map(|k| k.into())
                     },
                     TemplateExprNode::Tag(tag) if tag.tag == "range" => {
                         parse_range(tag, renderer, context)
